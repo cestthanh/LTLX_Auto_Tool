@@ -2,8 +2,14 @@ const DucthinhBrowser = require("./browser");
 const config = require("./config");
 
 async function main() {
+    // Đọc số câu hỏi từ tham số dòng lệnh (nếu có): ví dụ "node ducthinh_app/index.js 30"
+    const args = process.argv.slice(2);
+    const cliQuestions = args[0] ? parseInt(args[0], 10) : null;
+    const maxQuestions = cliQuestions && !isNaN(cliQuestions) ? cliQuestions : config.practice.maxQuestions;
+
     console.log("================================================================================");
     console.log("    HỆ THỐNG TỰ ĐỘNG ÔN LUYỆN - ĐÀO TẠO LÁI XE ĐỨC THỊNH (DUCTHINH.HUELMS.COM) ");
+    console.log(`    SỐ CÂU HỎI CẦN LÀM: ${maxQuestions} CÂU                                     `);
     console.log("================================================================================");
     
     const app = new DucthinhBrowser();
@@ -25,11 +31,13 @@ async function main() {
         console.log("\n--- BƯỚC 4: BẮT ĐẦU [LUYỆN TẤT CẢ] ---");
         await app.startPracticeAll();
 
-        // Bước 5: Tự động giải toàn bộ 185 câu hỏi với đáp án chuẩn 100%
+        // Bước 5: Tự động giải câu hỏi với số lượng được chỉ định
         console.log("\n--- BƯỚC 5: TỰ ĐỘNG GIẢI CÂU HỎI & TÍCH LŨY GIỜ HỌC ---");
         await app.solveAllQuestions({
-            delayPerQuestion: config.practice.delayPerQuestion,
-            maxQuestions: config.practice.maxQuestions
+            minDelayPerQuestion: config.practice.minDelayPerQuestion,
+            maxDelayPerQuestion: config.practice.maxDelayPerQuestion,
+            readTimePerQuestion: config.practice.readTimePerQuestion,
+            maxQuestions: maxQuestions
         });
 
         // Giữ trình duyệt để người dùng xem kết quả
