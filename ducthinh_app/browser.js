@@ -729,6 +729,53 @@ class DucthinhBrowser {
     }
 
     /**
+     * Tự động tìm và nhấp vào bài học / video CHƯA HỌC đầu tiên trên danh mục
+     */
+    async jumpToFirstUncompletedLesson() {
+        if (!this.page) return;
+
+        console.log("[*] Đang quét danh mục bài học để tìm bài CHƯA HỌC (bỏ qua các bài đã học)...");
+        await new Promise(r => setTimeout(r, 2500));
+
+        const result = await this.safeEvaluate(() => {
+            // Mở rộng tất cả các nhánh cây bài học nếu bị đóng
+            const closedSwitchers = Array.from(document.querySelectorAll('.ant-tree-switcher_close, [class*="switcher_close"]'));
+            for (const sw of closedSwitchers) {
+                try { sw.click(); } catch(e) {}
+            }
+
+            const allNodes = Array.from(document.querySelectorAll('.ant-tree-node-content-wrapper, .learning-syllabus-item, [class*="tree-node"], .ant-menu-item, a.item'));
+            
+            for (let i = 0; i < allNodes.length; i++) {
+                const node = allNodes[i];
+                const text = node.innerText ? node.innerText.trim() : "";
+                if (!text || text.length < 2) continue;
+
+                // Kiểm tra xem bài học này đã có tích xanh hoàn thành chưa
+                const parent = node.closest('.ant-tree-treenode') || node.parentElement || node;
+                const html = parent.innerHTML || "";
+                const isCompleted = html.includes('anticon-check') || html.includes('ti-check') || html.includes('icon-check') || html.includes('✓') || html.includes('check-circle') || parent.classList.contains('passed') || parent.classList.contains('completed');
+
+                // Nếu chưa hoàn thành -> Nhấp vào bài này ngay lập tức!
+                if (!isCompleted) {
+                    node.click();
+                    return { success: true, jumped: true, title: text.replace(/\n/g, ' - ') };
+                }
+            }
+
+            return { success: true, jumped: false };
+        });
+
+        if (result && result.jumped) {
+            console.log(`[✓] ĐÃ TỰ ĐỘNG CHUYỂN ĐẾN BÀI CHƯA HỌC: "${result.title}"`);
+            await new Promise(r => setTimeout(r, 4000));
+            await this.handleModals();
+        } else {
+            console.log("[*] Đang ở bài học hiện tại, tiếp tục phát...");
+        }
+    }
+
+    /**
      * Tự động học toàn bộ bài giảng điện tử & video trong khóa học
      */
     async learnAllLessonsInCourse(courseKeyword = "Đạo đức", maxLessons = this.config.video.maxLessons || 50) {
@@ -736,6 +783,9 @@ class DucthinhBrowser {
         console.log(`    BẮT ĐẦU TỰ ĐỘNG HỌC BÀI GIẢNG ĐIỆN TỬ & VIDEO                               `);
         console.log(`    Môn học: "${courseKeyword}" | Tốc độ: ${this.config.video.playbackRate || 1.25}x | Tắt tiếng: BẬT`);
         console.log(`================================================================================\n`);
+
+        // Tự động tìm và nhảy đến bài chưa học đầu tiên
+        await this.jumpToFirstUncompletedLesson();
 
         let completedLessons = 0;
 
