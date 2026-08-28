@@ -5,7 +5,7 @@ module.exports = {
     domain: "ducthinh",
     baseUrl: "https://ducthinh.huelms.com",
     apiUrl: "https://staging-api.lotuslms.com",
-
+    
     // Thông tin tài khoản mặc định
     account: {
         username: "025098009525",
@@ -29,12 +29,20 @@ module.exports = {
         }
     },
 
-    // Cấu hình luyện thi tốc độ nhanh (Tối đa 5s/câu)
+    // Cấu hình luyện thi trắc nghiệm
     practice: {
         minDelayPerQuestion: 3,  // Thời gian giữ tối thiểu mỗi câu (giây)
         maxDelayPerQuestion: 5,  // Thời gian giữ tối đa mỗi câu (giây)
         readTimePerQuestion: 1,  // Thời gian giả lập đọc đề nhanh (giây)
         maxQuestions: 185        // Số câu hỏi tối đa cần làm trong đề
+    },
+
+    // Cấu hình học bài giảng điện tử & video
+    video: {
+        playbackRate: 1.25,      // Tốc độ phát bài giảng (1.0x - 1.5x)
+        muteAudio: true,         // Tự động tắt tiếng để không làm phiền bạn
+        maxLessons: 50,          // Số bài học/video tối đa trong 1 phiên
+        maxHoursPerDay: 8        // Giới hạn giờ học tối đa theo quy định (8h/ngày)
     },
 
     // Cấu hình trình duyệt

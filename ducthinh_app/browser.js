@@ -8,7 +8,8 @@ class DucthinhBrowser {
             ...options,
             account: { ...config.account, ...(options.account || {}) },
             browser: { ...config.browser, ...(options.browser || {}) },
-            practice: { ...config.practice, ...(options.practice || {}) }
+            practice: { ...config.practice, ...(options.practice || {}) },
+            video: { ...config.video, ...(options.video || {}) }
         };
         this.browser = null;
         this.page = null;
@@ -37,7 +38,6 @@ class DucthinhBrowser {
 
         // 1. Vô hiệu hóa bẫy devtools + Khóa cứng trạng thái Always-Visible / Always-Focused
         await this.page.evaluateOnNewDocument(() => {
-            // Bypass automation detection
             Object.defineProperty(navigator, "webdriver", { get: () => undefined });
             console.table = function() {};
             console.clear = function() {};
@@ -112,11 +112,8 @@ class DucthinhBrowser {
         }
 
         if (box) {
-            // Tọa độ ngẫu nhiên bên trong phần tử
             const targetX = box.x + box.width * (0.3 + Math.random() * 0.4);
             const targetY = box.y + box.height * (0.3 + Math.random() * 0.4);
-
-            // Di chuyển chuột mượt mà với nhiều bước
             const steps = 12 + Math.floor(Math.random() * 10);
             await this.page.mouse.move(targetX, targetY, { steps });
             await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 150)));
@@ -133,7 +130,6 @@ class DucthinhBrowser {
         if (!this.page) return { isVerification: false };
 
         return await this.page.evaluate(() => {
-            // 1. Kiểm tra iframe Google reCAPTCHA / hCaptcha / Geetest
             const captchaIframes = document.querySelectorAll('iframe[src*="recaptcha"], iframe[src*="captcha"], iframe[src*="hcaptcha"], iframe[src*="geetest"]');
             if (captchaIframes.length > 0) {
                 for (const f of captchaIframes) {
@@ -144,7 +140,6 @@ class DucthinhBrowser {
                 }
             }
 
-            // 2. Kiểm tra modal xác thực người dùng / robot / hoạt động bất thường
             const modals = Array.from(document.querySelectorAll('.ant-modal, .modal, .ant-modal-content, [role="dialog"]'));
             for (const modal of modals) {
                 const text = modal.innerText || "";
@@ -166,22 +161,19 @@ class DucthinhBrowser {
     async handleHumanVerificationIfNeeded() {
         const check = await this.checkForHumanVerification();
         if (check.isVerification) {
-            // Phát âm thanh cảnh báo Beep ra loa
             process.stdout.write('\x07');
-            
             console.log("\n================================================================================");
             console.log(`🔔🔔🔔 [CẦN BẠN XÁC NHẬN] ${check.message}`);
             console.log(`👉 Vui lòng thao tác bấm xác nhận trực tiếp trên cửa sổ Chrome.`);
             console.log(`⏳ Bot đang tạm dừng và sẽ TỰ ĐỘNG TIẾP TỤC NGAY khi bạn hoàn tất...`);
             console.log("================================================================================\n");
 
-            // Vòng lặp chờ người dùng thao tác xong và popup biến mất
             while (true) {
                 await new Promise(r => setTimeout(r, 1000));
                 const currentCheck = await this.checkForHumanVerification();
                 if (!currentCheck.isVerification) {
                     console.log("\n[✓] XÁC NHẬN THÀNH CÔNG! Đã phát hiện hộp thoại đóng lại.");
-                    console.log("[*] Đang tiếp tục giải bài tự động...\n");
+                    console.log("[*] Đang tiếp tục tự động...\n");
                     await new Promise(r => setTimeout(r, 1500));
                     break;
                 }
@@ -225,7 +217,7 @@ class DucthinhBrowser {
     }
 
     /**
-     * Nhấp vào môn học theo tên (Ví dụ: "Phần 2. Hệ thống báo hiệu đường bộ")
+     * Nhấp vào môn học theo tên (Ví dụ: "Phần 2. Hệ thống báo hiệu đường bộ" hoặc "Đạo đức")
      */
     async openCourse(keyword = "Phần 2. Hệ thống báo hiệu đường bộ") {
         if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
@@ -245,9 +237,11 @@ class DucthinhBrowser {
         }, keyword);
 
         if (!clicked.success) {
-            const fallbackUrl = `${this.config.baseUrl}/student/course/${this.config.courses.phan2.iid}/dashboard`;
-            console.log(`[!] Không tìm thấy link trong DOM, điều hướng trực tiếp tới: ${fallbackUrl}`);
-            await this.page.goto(fallbackUrl, { waitUntil: "domcontentloaded" });
+            console.log(`[!] Không tìm thấy link chứa từ khóa: "${keyword}", thử mở khóa học đầu tiên...`);
+            await this.page.evaluate(() => {
+                const firstLink = document.querySelector('tr a, .course-item a');
+                if (firstLink) firstLink.click();
+            });
         } else {
             console.log(`[✓] Đã nhấp vào môn học: "${clicked.text}"`);
         }
@@ -258,7 +252,7 @@ class DucthinhBrowser {
     }
 
     /**
-     * Nhấp vào nhiệm vụ trong bảng tổng quan môn học (Ví dụ: "Ôn luyện")
+     * Nhấp vào nhiệm vụ trong bảng tổng quan môn học (Ví dụ: "Ôn luyện" hoặc "Bài giảng điện tử")
      */
     async openTask(taskKeyword = "Ôn luyện") {
         if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
@@ -286,7 +280,21 @@ class DucthinhBrowser {
         }, taskKeyword);
 
         if (!clicked.success) {
-            throw new Error(`Không tìm thấy mục: "${taskKeyword}" trên bảng chi tiết môn học.`);
+            // Thử tìm link trực tiếp trên trang
+            const directClicked = await this.page.evaluate((kw) => {
+                const links = Array.from(document.querySelectorAll('a, button'));
+                for (const l of links) {
+                    if (l.innerText && l.innerText.toLowerCase().includes(kw.toLowerCase())) {
+                        l.click();
+                        return { success: true, text: l.innerText.trim() };
+                    }
+                }
+                return { success: false };
+            }, taskKeyword);
+
+            if (!directClicked.success) {
+                throw new Error(`Không tìm thấy mục: "${taskKeyword}" trên bảng chi tiết môn học.`);
+            }
         }
 
         console.log(`[✓] Đã nhấp vào mục: "${taskKeyword}"`);
@@ -417,7 +425,6 @@ class DucthinhBrowser {
                 clickSuccess = await this.smoothMoveAndClick(targetSelector);
             }
             if (!clickSuccess) {
-                // Fallback click trực quan
                 const labels = await this.page.$$('label, .ant-radio-wrapper');
                 if (labels[targetIndex]) {
                     await this.smoothMoveAndClick(labels[targetIndex]);
@@ -435,7 +442,6 @@ class DucthinhBrowser {
                 process.stdout.write(`${s}s `);
                 await new Promise(res => setTimeout(res, 1000));
                 
-                // Kiểm tra xem có popup nhảy ra trong lúc giữ câu không
                 if (s % 2 === 0) {
                     await this.handleHumanVerificationIfNeeded();
                 }
@@ -454,7 +460,6 @@ class DucthinhBrowser {
             if (nextBtn && nextBtn.asElement()) {
                 await this.smoothMoveAndClick(nextBtn.asElement());
             } else {
-                // Fallback nếu không bắt được element handle
                 await this.page.evaluate(() => {
                     const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
                     for (const b of buttons) {
@@ -495,7 +500,6 @@ class DucthinhBrowser {
             await this.smoothMoveAndClick(finishBtn.asElement());
             console.log("[✓] Đã bấm nút: [Kết thúc luyện thi]");
         } else {
-            // Fallback JS click
             const clicked = await this.page.evaluate(() => {
                 const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a, div[role="button"]'));
                 for (const b of buttons) {
@@ -548,6 +552,205 @@ class DucthinhBrowser {
             console.log(`\nKết quả chi tiết:\n${resultSummary.summary}\n`);
         }
         console.log("================================================================================\n");
+    }
+
+    // =========================================================================
+    //   MODULE TỰ ĐỘNG HỌC BÀI GIẢNG ĐIỆN TỬ & VIDEO (VIDEO/AUDIO AUTO-PLAYER)
+    // =========================================================================
+
+    /**
+     * Tự động phát Media (Audio hoặc Video), thiết lập tốc độ và tắt tiếng
+     */
+    async playCurrentMedia(playbackRate = this.config.video.playbackRate || 1.25, muteAudio = true) {
+        if (!this.page) return null;
+
+        await this.handleModals();
+
+        const mediaInfo = await this.page.evaluate((rate, mute) => {
+            const audios = Array.from(document.querySelectorAll('audio'));
+            const videos = Array.from(document.querySelectorAll('video'));
+            const activeMedia = videos.find(v => v.duration > 0) || audios.find(a => a.duration > 0) || videos[0] || audios[0];
+
+            let title = document.querySelector('.lesson-title, .header-title, h1, h2, h3, .current-item')?.innerText?.trim() || document.title;
+
+            if (activeMedia) {
+                activeMedia.muted = !!mute;
+                try { activeMedia.playbackRate = rate; } catch (e) {}
+                if (activeMedia.paused) {
+                    activeMedia.play().catch(() => {});
+                }
+
+                return {
+                    hasMedia: true,
+                    type: activeMedia.tagName.toLowerCase(),
+                    duration: Math.round(activeMedia.duration) || 0,
+                    currentTime: Math.round(activeMedia.currentTime) || 0,
+                    paused: activeMedia.paused,
+                    title
+                };
+            }
+
+            // Nếu không có thẻ media trực tiếp, thử bấm nút Play trên giao diện
+            const playBtn = document.querySelector('.media-audio__play-button, .play-btn, .vjs-big-play-button, .vjs-play-control');
+            if (playBtn) {
+                playBtn.click();
+                return { hasMedia: true, type: "button_click", duration: 60, currentTime: 0, paused: false, title };
+            }
+
+            return { hasMedia: false, title };
+        }, playbackRate, muteAudio);
+
+        return mediaInfo;
+    }
+
+    /**
+     * Theo dõi tiến độ phát bài giảng/video cho đến khi hoàn thành
+     */
+    async waitForMediaCompletion() {
+        if (!this.page) return;
+
+        let lastCurrentTime = -1;
+        let stuckCount = 0;
+
+        while (true) {
+            await new Promise(r => setTimeout(r, 2000));
+
+            // Kiểm tra và tạm dừng nếu có Captcha/xác minh người thật
+            await this.handleHumanVerificationIfNeeded();
+
+            const status = await this.page.evaluate(() => {
+                const audios = Array.from(document.querySelectorAll('audio'));
+                const videos = Array.from(document.querySelectorAll('video'));
+                const media = videos.find(v => v.duration > 0) || audios.find(a => a.duration > 0) || videos[0] || audios[0];
+
+                if (media) {
+                    // Đảm bảo vẫn đang phát
+                    if (media.paused && media.currentTime < (media.duration - 1)) {
+                        media.play().catch(() => {});
+                    }
+
+                    const isEnded = media.ended || (media.duration > 0 && media.currentTime >= (media.duration - 0.8));
+                    return {
+                        exists: true,
+                        currentTime: Math.round(media.currentTime),
+                        duration: Math.round(media.duration),
+                        isEnded
+                    };
+                }
+
+                return { exists: false, isEnded: true };
+            });
+
+            if (!status.exists || status.isEnded) {
+                console.log("\n[✓] Đã phát hoàn thành bài học hiện tại!");
+                break;
+            }
+
+            // In tiến độ phát
+            const curMin = Math.floor(status.currentTime / 60).toString().padStart(2, '0');
+            const curSec = (status.currentTime % 60).toString().padStart(2, '0');
+            const durMin = Math.floor(status.duration / 60).toString().padStart(2, '0');
+            const durSec = (status.duration % 60).toString().padStart(2, '0');
+            process.stdout.write(`\r    ▶ Đang học: [${curMin}:${curSec} / ${durMin}:${durSec}] (${this.config.video.playbackRate || 1.25}x)   `);
+
+            // Kiểm tra chống kẹt
+            if (status.currentTime === lastCurrentTime) {
+                stuckCount++;
+                if (stuckCount >= 10) { // Kẹt quá 20s
+                    console.log("\n[!] Nhận thấy tiến độ không đổi, tự động kích hoạt Play lại...");
+                    await this.playCurrentMedia();
+                    stuckCount = 0;
+                }
+            } else {
+                lastCurrentTime = status.currentTime;
+                stuckCount = 0;
+            }
+        }
+    }
+
+    /**
+     * Bấm chuyển sang bài học / video kế tiếp
+     */
+    async nextLesson() {
+        if (!this.page) return false;
+
+        console.log("\n[*] Chuyển sang bài học tiếp theo...");
+        await new Promise(r => setTimeout(r, 1500));
+
+        // 1. Tìm nút "Tiếp theo" ở thanh điều hướng góc dưới
+        const moved = await this.page.evaluate(() => {
+            const nextBtn = document.querySelector('.footer-navigator__item-next, [class*="item-next"], .btn-next');
+            if (nextBtn) {
+                nextBtn.click();
+                return { success: true, text: nextBtn.innerText.trim().replace(/\n/g, ' - ') };
+            }
+
+            const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+            for (const b of buttons) {
+                const txt = b.innerText.trim();
+                if (txt === "Tiếp theo" || txt.includes("Tiếp theo") || txt.includes("Bài tiếp") || txt === "Bài sau") {
+                    b.click();
+                    return { success: true, text: txt };
+                }
+            }
+            return { success: false };
+        });
+
+        if (moved.success) {
+            console.log(`[✓] Đã bấm: "${moved.text}"`);
+            await new Promise(r => setTimeout(r, 4000));
+            await this.handleModals();
+            return true;
+        }
+
+        console.log("[!] Không tìm thấy nút [Tiếp theo], có thể đã hoàn thành toàn bộ khóa học.");
+        return false;
+    }
+
+    /**
+     * Tự động học toàn bộ bài giảng điện tử & video trong khóa học
+     */
+    async learnAllLessonsInCourse(courseKeyword = "Đạo đức", maxLessons = this.config.video.maxLessons || 50) {
+        console.log(`\n================================================================================`);
+        console.log(`    BẮT ĐẦU TỰ ĐỘNG HỌC BÀI GIẢNG ĐIỆN TỬ & VIDEO                               `);
+        console.log(`    Môn học: "${courseKeyword}" | Tốc độ: ${this.config.video.playbackRate || 1.25}x | Tắt tiếng: BẬT`);
+        console.log(`================================================================================\n`);
+
+        let completedLessons = 0;
+
+        for (let i = 1; i <= maxLessons; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+
+            // 1. Khởi chạy phát bài học hiện tại
+            const media = await this.playCurrentMedia(this.config.video.playbackRate, this.config.video.muteAudio);
+            completedLessons++;
+
+            if (media && media.hasMedia) {
+                console.log(`\n[Bài ${completedLessons}] 🎬 ${media.title}`);
+                console.log(`    Thời lượng: ~${Math.round(media.duration / 60)} phút | Loại: ${media.type.toUpperCase()}`);
+                
+                // 2. Chờ phát hoàn thành
+                await this.waitForMediaCompletion();
+            } else {
+                console.log(`\n[Bài ${completedLessons}] 📄 Bài đọc / Khảo sát (Giữ 15s để tích lũy giờ)...`);
+                for (let s = 15; s > 0; s--) {
+                    process.stdout.write(`\r    ⏳ Đang ghi nhận: ${s}s... `);
+                    await new Promise(res => setTimeout(res, 1000));
+                }
+                process.stdout.write("\n");
+            }
+
+            // 3. Chuyển sang bài kế tiếp
+            const hasNext = await this.nextLesson();
+            if (!hasNext) {
+                console.log("\n🎉 [HOÀN THÀNH] ĐÃ HỌC XONG TOÀN BỘ CÁC BÀI TRONG MÔN HỌC!");
+                break;
+            }
+        }
+
+        console.log(`\n================================================================================`);
+        console.log(`[✓] ĐÃ HOÀN THÀNH TỰ ĐỘNG HỌC ${completedLessons} BÀI HỌC / VIDEO!`);
+        console.log(`================================================================================\n`);
     }
 
     /**
