@@ -80,7 +80,7 @@ class DucthinhBrowser {
     }
 
     /**
-     * Di chuyển chuột mượt mà tới vị trí mục tiêu
+     * Di chuyển chuột mượt mà tới vị trí mục tiêu và nhấn click thật
      */
     async smoothMoveAndClick(selectorOrHandle) {
         let box = null;
@@ -104,6 +104,69 @@ class DucthinhBrowser {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Kiểm tra xem trên màn hình có xuất hiện Captcha / Hộp thoại xác minh người thật không
+     */
+    async checkForHumanVerification() {
+        if (!this.page) return { isVerification: false };
+
+        return await this.page.evaluate(() => {
+            // 1. Kiểm tra iframe Google reCAPTCHA / hCaptcha / Geetest
+            const captchaIframes = document.querySelectorAll('iframe[src*="recaptcha"], iframe[src*="captcha"], iframe[src*="hcaptcha"], iframe[src*="geetest"]');
+            if (captchaIframes.length > 0) {
+                for (const f of captchaIframes) {
+                    const rect = f.getBoundingClientRect();
+                    if (rect.width > 20 && rect.height > 20 && rect.top < window.innerHeight && rect.bottom > 0) {
+                        return { isVerification: true, type: "CAPTCHA_IFRAME", message: "Phát hiện Google reCAPTCHA / Captcha trên màn hình" };
+                    }
+                }
+            }
+
+            // 2. Kiểm tra modal xác thực người dùng / robot / hoạt động bất thường
+            const modals = Array.from(document.querySelectorAll('.ant-modal, .modal, .ant-modal-content, [role="dialog"]'));
+            for (const modal of modals) {
+                const text = modal.innerText || "";
+                if (text.includes("xác nhận người thật") || text.includes("Tôi không phải người máy") || 
+                    text.includes("mã bảo vệ") || text.includes("mã xác thực") || 
+                    text.includes("hoạt động bất thường") || text.includes("Tài khoản tạm thời bị khóa") ||
+                    text.includes("Xác minh") || text.includes("Verification")) {
+                    return { isVerification: true, type: "MODAL_VERIFICATION", message: text.slice(0, 80).replace(/\n/g, ' ') };
+                }
+            }
+
+            return { isVerification: false };
+        });
+    }
+
+    /**
+     * Tự động tạm dừng khi có Captcha/Xác minh và TỰ ĐỘNG TIẾP TỤC khi người dùng bấm xong
+     */
+    async handleHumanVerificationIfNeeded() {
+        const check = await this.checkForHumanVerification();
+        if (check.isVerification) {
+            // Phát âm thanh cảnh báo Beep ra loa
+            process.stdout.write('\x07');
+            
+            console.log("\n================================================================================");
+            console.log(`🔔🔔🔔 [CẦN BẠN XÁC NHẬN] ${check.message}`);
+            console.log(`👉 Vui lòng thao tác bấm xác nhận trực tiếp trên cửa sổ Chrome.`);
+            console.log(`⏳ Bot đang tạm dừng và sẽ TỰ ĐỘNG TIẾP TỤC NGAY khi bạn hoàn tất...`);
+            console.log("================================================================================\n");
+
+            // Vòng lặp chờ người dùng thao tác xong và popup biến mất
+            while (true) {
+                await new Promise(r => setTimeout(r, 1000));
+                const currentCheck = await this.checkForHumanVerification();
+                if (!currentCheck.isVerification) {
+                    console.log("\n[✓] XÁC NHẬN THÀNH CÔNG! Đã phát hiện hộp thoại đóng lại.");
+                    console.log("[*] Đang tiếp tục giải bài tự động...\n");
+                    await new Promise(r => setTimeout(r, 1500));
+                    break;
+                }
+            }
+        }
     }
 
     /**
@@ -244,7 +307,7 @@ class DucthinhBrowser {
     }
 
     /**
-     * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với MÔ PHỎNG HÀNH VI NGƯỜI THẬT
+     * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với MÔ PHỎNG HÀNH VI & SMART RESUME
      */
     async solveAllQuestions(options = {}) {
         const minDelay = options.minDelayPerQuestion || this.config.practice.minDelayPerQuestion || 15;
@@ -252,7 +315,7 @@ class DucthinhBrowser {
         const maxQuestions = options.maxQuestions || this.config.practice.maxQuestions || 185;
 
         console.log(`\n================================================================================`);
-        console.log(`    BẮT ĐẦU TỰ ĐỘNG GIẢI ${maxQuestions} CÂU HỎI (MÔ PHỎNG HÀNH VI TỰ NHIÊN)     `);
+        console.log(`    BẮT ĐẦU TỰ ĐỘNG GIẢI ${maxQuestions} CÂU HỎI (TỰ ĐỘNG TẠM DỪNG / TIẾP TỤC)     `);
         console.log(`    Thời gian giữ mỗi câu ngẫu nhiên: ${minDelay}s - ${maxDelay}s (tích lũy giờ học thật)`);
         console.log(`================================================================================\n`);
 
@@ -261,19 +324,8 @@ class DucthinhBrowser {
         for (let i = 1; i <= maxQuestions; i++) {
             await new Promise(r => setTimeout(r, 1200));
 
-            // 1. Kiểm tra nếu có cảnh báo khóa tài khoản
-            const lockCheck = await this.page.evaluate(() => {
-                const bodyText = document.body.innerText;
-                if (bodyText.includes("Tài khoản tạm thời bị khóa") || bodyText.includes("hoạt động bất thường")) {
-                    return true;
-                }
-                return false;
-            });
-
-            if (lockCheck) {
-                console.log("\n🚨 [CẢNH BÁO] Phát hiện hộp thoại khóa tài khoản trên màn hình! Dừng quá trình giải.");
-                break;
-            }
+            // 1. Kiểm tra và tạm dừng nếu có Captcha / Xác minh người thật
+            await this.handleHumanVerificationIfNeeded();
 
             // 2. Kiểm tra nếu bài luyện thi đã kết thúc
             const isFinished = await this.page.evaluate(() => {
@@ -335,6 +387,9 @@ class DucthinhBrowser {
             await this.page.mouse.wheel({ deltaY: 50 + Math.floor(Math.random() * 50) });
             await new Promise(r => setTimeout(r, 400));
 
+            // Kiểm tra lại trước khi click
+            await this.handleHumanVerificationIfNeeded();
+
             // 6. Di chuột thật và bấm chọn đáp án
             let clickSuccess = false;
             if (qInfo.qId) {
@@ -359,6 +414,11 @@ class DucthinhBrowser {
             for (let s = actualDelay; s > 0; s--) {
                 process.stdout.write(`${s}s `);
                 await new Promise(res => setTimeout(res, 1000));
+                
+                // Kiểm tra xem có popup nhảy ra trong lúc giữ câu không
+                if (s % 3 === 0) {
+                    await this.handleHumanVerificationIfNeeded();
+                }
             }
             process.stdout.write(` -> Chuyển câu!\n\n`);
 
