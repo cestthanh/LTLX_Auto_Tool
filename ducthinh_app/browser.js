@@ -474,6 +474,83 @@ class DucthinhBrowser {
     }
 
     /**
+     * Tự động bấm "Kết thúc luyện thi" và xác nhận nộp bài
+     */
+    async finishPractice() {
+        if (!this.page) return;
+
+        console.log("\n[*] Đang tìm và bấm nút [Kết thúc luyện thi] để nộp bài...");
+        await new Promise(r => setTimeout(r, 1500));
+
+        // 1. Di chuột và click nút [Kết thúc luyện thi] / [Kết thúc] / [Nộp bài]
+        const finishBtn = await this.page.evaluateHandle(() => {
+            const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a, div[role="button"]'));
+            return buttons.find(b => {
+                const txt = b.innerText.trim();
+                return txt.includes("Kết thúc luyện thi") || txt === "Kết thúc" || txt.includes("Nộp bài") || txt.includes("Hoàn thành bài");
+            }) || null;
+        });
+
+        if (finishBtn && finishBtn.asElement()) {
+            await this.smoothMoveAndClick(finishBtn.asElement());
+            console.log("[✓] Đã bấm nút: [Kết thúc luyện thi]");
+        } else {
+            // Fallback JS click
+            const clicked = await this.page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a, div[role="button"]'));
+                for (const b of buttons) {
+                    const txt = b.innerText.trim();
+                    if (txt.includes("Kết thúc luyện thi") || txt === "Kết thúc" || txt.includes("Nộp bài") || txt.includes("Hoàn thành bài")) {
+                        b.click();
+                        return { success: true, text: txt };
+                    }
+                }
+                return { success: false };
+            });
+            if (clicked.success) {
+                console.log(`[✓] Đã bấm: "${clicked.text}"`);
+            } else {
+                console.log("[!] Không tìm thấy nút Kết thúc luyện thi (có thể bài đã kết thúc trước đó).");
+            }
+        }
+
+        await new Promise(r => setTimeout(r, 2000));
+
+        // 2. Xác nhận popup nộp bài nếu có ("Xác nhận", "Đồng ý", "Nộp bài")
+        await this.page.evaluate(() => {
+            const modals = Array.from(document.querySelectorAll('.ant-modal, .modal, [role="dialog"], .ant-modal-content'));
+            for (const m of modals) {
+                const btns = Array.from(m.querySelectorAll('button, .ant-btn, div.btn'));
+                for (const b of btns) {
+                    const txt = b.innerText.trim();
+                    if (txt === "Đồng ý" || txt === "Xác nhận" || txt === "Nộp bài" || txt.includes("Đồng ý")) {
+                        b.click();
+                        return;
+                    }
+                }
+            }
+        });
+
+        await new Promise(r => setTimeout(r, 3000));
+
+        // 3. Đọc kết quả sau khi nộp bài
+        const resultSummary = await this.page.evaluate(() => {
+            const summaryEl = document.querySelector('.result-summary, .exam-result, .practice-result, .ant-card, .result');
+            return {
+                title: document.title,
+                summary: summaryEl ? summaryEl.innerText.trim().slice(0, 300) : ""
+            };
+        });
+
+        console.log("\n================================================================================");
+        console.log("🎉 ĐÃ NỘP BÀI THÀNH CÔNG VÀ KẾT THÚC BÀI LUYỆN THI!");
+        if (resultSummary.summary) {
+            console.log(`\nKết quả chi tiết:\n${resultSummary.summary}\n`);
+        }
+        console.log("================================================================================\n");
+    }
+
+    /**
      * Tự động xác nhận các popup nội quy học tập hoặc thiết bị mới nếu xuất hiện
      */
     async handleModals() {

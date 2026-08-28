@@ -40,6 +40,10 @@ async function main() {
             maxQuestions: maxQuestions
         });
 
+        // Bước 6: Tự động bấm "Kết thúc luyện thi" và nộp bài
+        console.log("\n--- BƯỚC 6: NỘP BÀI VÀ KẾT THÚC LUYỆN THI ---");
+        await app.finishPractice();
+
         // Giữ trình duyệt để người dùng xem kết quả
         await app.keepAlive();
     } catch (error) {
