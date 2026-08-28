@@ -17,6 +17,26 @@ class DucthinhBrowser {
     }
 
     /**
+     * Thực thi evaluate an toàn, tự động thử lại nếu gặp lỗi detached Frame hoặc reload DOM
+     */
+    async safeEvaluate(fn, ...args) {
+        for (let retry = 0; retry < 5; retry++) {
+            try {
+                if (!this.page || this.page.isClosed()) return null;
+                return await this.page.evaluate(fn, ...args);
+            } catch (err) {
+                const msg = err.message || "";
+                if (msg.includes("detached Frame") || msg.includes("Execution context") || msg.includes("Target closed")) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    continue;
+                }
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Khởi chạy trình duyệt và tiêm cơ chế Always-Active + Bypass DevTools
      */
     async launch() {
@@ -103,23 +123,25 @@ class DucthinhBrowser {
      * Di chuyển chuột mượt mà tới vị trí mục tiêu và nhấn click thật
      */
     async smoothMoveAndClick(selectorOrHandle) {
-        let box = null;
-        if (typeof selectorOrHandle === "string") {
-            const el = await this.page.$(selectorOrHandle);
-            if (el) box = await el.boundingBox();
-        } else if (selectorOrHandle && selectorOrHandle.boundingBox) {
-            box = await selectorOrHandle.boundingBox();
-        }
+        try {
+            let box = null;
+            if (typeof selectorOrHandle === "string") {
+                const el = await this.page.$(selectorOrHandle);
+                if (el) box = await el.boundingBox();
+            } else if (selectorOrHandle && selectorOrHandle.boundingBox) {
+                box = await selectorOrHandle.boundingBox();
+            }
 
-        if (box) {
-            const targetX = box.x + box.width * (0.3 + Math.random() * 0.4);
-            const targetY = box.y + box.height * (0.3 + Math.random() * 0.4);
-            const steps = 12 + Math.floor(Math.random() * 10);
-            await this.page.mouse.move(targetX, targetY, { steps });
-            await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 150)));
-            await this.page.mouse.click(targetX, targetY);
-            return true;
-        }
+            if (box) {
+                const targetX = box.x + box.width * (0.3 + Math.random() * 0.4);
+                const targetY = box.y + box.height * (0.3 + Math.random() * 0.4);
+                const steps = 12 + Math.floor(Math.random() * 10);
+                await this.page.mouse.move(targetX, targetY, { steps });
+                await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 150)));
+                await this.page.mouse.click(targetX, targetY);
+                return true;
+            }
+        } catch (e) {}
         return false;
     }
 
@@ -127,9 +149,7 @@ class DucthinhBrowser {
      * Kiểm tra xem trên màn hình có xuất hiện Captcha / Hộp thoại xác minh người thật không
      */
     async checkForHumanVerification() {
-        if (!this.page) return { isVerification: false };
-
-        return await this.page.evaluate(() => {
+        return await this.safeEvaluate(() => {
             const captchaIframes = document.querySelectorAll('iframe[src*="recaptcha"], iframe[src*="captcha"], iframe[src*="hcaptcha"], iframe[src*="geetest"]');
             if (captchaIframes.length > 0) {
                 for (const f of captchaIframes) {
@@ -152,7 +172,7 @@ class DucthinhBrowser {
             }
 
             return { isVerification: false };
-        });
+        }) || { isVerification: false };
     }
 
     /**
@@ -160,7 +180,7 @@ class DucthinhBrowser {
      */
     async handleHumanVerificationIfNeeded() {
         const check = await this.checkForHumanVerification();
-        if (check.isVerification) {
+        if (check && check.isVerification) {
             process.stdout.write('\x07');
             console.log("\n================================================================================");
             console.log(`🔔🔔🔔 [CẦN BẠN XÁC NHẬN] ${check.message}`);
@@ -171,7 +191,7 @@ class DucthinhBrowser {
             while (true) {
                 await new Promise(r => setTimeout(r, 1000));
                 const currentCheck = await this.checkForHumanVerification();
-                if (!currentCheck.isVerification) {
+                if (!currentCheck || !currentCheck.isVerification) {
                     console.log("\n[✓] XÁC NHẬN THÀNH CÔNG! Đã phát hiện hộp thoại đóng lại.");
                     console.log("[*] Đang tiếp tục tự động...\n");
                     await new Promise(r => setTimeout(r, 1500));
@@ -217,7 +237,7 @@ class DucthinhBrowser {
     }
 
     /**
-     * Nhấp vào môn học theo tên (Ví dụ: "Phần 2. Hệ thống báo hiệu đường bộ" hoặc "Đạo đức")
+     * Nhấp vào môn học theo tên (Ví dụ: "Phần 2. Hệ thống báo hiệu đường bộ" hoặc "Kỹ thuật lái xe")
      */
     async openCourse(keyword = "Phần 2. Hệ thống báo hiệu đường bộ") {
         if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
@@ -225,7 +245,7 @@ class DucthinhBrowser {
         console.log(`[*] Đang tìm và nhấp vào khóa học: "${keyword}"...`);
         await this.page.waitForSelector('a, tr, td', { timeout: 20000 });
 
-        const clicked = await this.page.evaluate((kw) => {
+        const clicked = await this.safeEvaluate((kw) => {
             const links = Array.from(document.querySelectorAll('a'));
             for (const a of links) {
                 if (a.innerText && a.innerText.toLowerCase().includes(kw.toLowerCase())) {
@@ -236,9 +256,9 @@ class DucthinhBrowser {
             return { success: false };
         }, keyword);
 
-        if (!clicked.success) {
-            console.log(`[!] Không tìm thấy link chứa từ khóa: "${keyword}", thử mở khóa học đầu tiên...`);
-            await this.page.evaluate(() => {
+        if (!clicked || !clicked.success) {
+            console.log(`[!] Không tìm thấy link chứa từ khóa: "${keyword}", thử mở môn học đầu tiên...`);
+            await this.safeEvaluate(() => {
                 const firstLink = document.querySelector('tr a, .course-item a');
                 if (firstLink) firstLink.click();
             });
@@ -260,7 +280,7 @@ class DucthinhBrowser {
         console.log(`[*] Đang tìm và nhấp vào mục: "${taskKeyword}"...`);
         await this.page.waitForSelector('table, tr, a, button', { timeout: 20000 });
 
-        const clicked = await this.page.evaluate((kw) => {
+        const clicked = await this.safeEvaluate((kw) => {
             const rows = Array.from(document.querySelectorAll('tr'));
             for (const row of rows) {
                 if (row.innerText && row.innerText.toLowerCase().includes(kw.toLowerCase())) {
@@ -276,33 +296,25 @@ class DucthinhBrowser {
                     }
                 }
             }
+
+            const links = Array.from(document.querySelectorAll('a, button'));
+            for (const l of links) {
+                if (l.innerText && l.innerText.toLowerCase().includes(kw.toLowerCase())) {
+                    l.click();
+                    return { success: true, text: l.innerText.trim() };
+                }
+            }
             return { success: false };
         }, taskKeyword);
 
-        if (!clicked.success) {
-            // Thử tìm link trực tiếp trên trang
-            const directClicked = await this.page.evaluate((kw) => {
-                const links = Array.from(document.querySelectorAll('a, button'));
-                for (const l of links) {
-                    if (l.innerText && l.innerText.toLowerCase().includes(kw.toLowerCase())) {
-                        l.click();
-                        return { success: true, text: l.innerText.trim() };
-                    }
-                }
-                return { success: false };
-            }, taskKeyword);
-
-            if (!directClicked.success) {
-                throw new Error(`Không tìm thấy mục: "${taskKeyword}" trên bảng chi tiết môn học.`);
-            }
+        if (!clicked || !clicked.success) {
+            throw new Error(`Không tìm thấy mục: "${taskKeyword}" trên bảng chi tiết môn học.`);
         }
 
         console.log(`[✓] Đã nhấp vào mục: "${taskKeyword}"`);
         await new Promise(r => setTimeout(r, 4000));
 
-        // Tự động xử lý các popup nội quy học tập / thiết bị mới
         await this.handleModals();
-
         return this.page.url();
     }
 
@@ -315,7 +327,7 @@ class DucthinhBrowser {
         console.log("[*] Đang tìm và bấm nút [Luyện tất cả]...");
         await new Promise(r => setTimeout(r, 2000));
 
-        const clicked = await this.page.evaluate(() => {
+        const clicked = await this.safeEvaluate(() => {
             const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
             for (const b of buttons) {
                 if (b.innerText && b.innerText.includes("Luyện tất cả")) {
@@ -326,7 +338,7 @@ class DucthinhBrowser {
             return { success: false };
         });
 
-        if (!clicked.success) {
+        if (!clicked || !clicked.success) {
             throw new Error("Không tìm thấy nút [Luyện tất cả] trên màn hình.");
         }
 
@@ -356,7 +368,7 @@ class DucthinhBrowser {
             await this.handleHumanVerificationIfNeeded();
 
             // 2. Kiểm tra nếu bài luyện thi đã kết thúc
-            const isFinished = await this.page.evaluate(() => {
+            const isFinished = await this.safeEvaluate(() => {
                 const text = document.body.innerText;
                 return text.includes("Kết quả luyện tập") || text.includes("Hoàn thành bài luyện") || text.includes("Điểm số của bạn");
             });
@@ -367,7 +379,7 @@ class DucthinhBrowser {
             }
 
             // 3. Lấy thông tin câu hỏi và ID câu hỏi từ giao diện
-            const qInfo = await this.page.evaluate(() => {
+            const qInfo = await this.safeEvaluate(() => {
                 const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
                 const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
                 const title = document.querySelector('.question-content, .question-title, h4, h3, .content')?.innerText?.trim() || "";
@@ -411,11 +423,11 @@ class DucthinhBrowser {
             }
             process.stdout.write("\n");
 
-            // Cuộn trang nhẹ nhàng mô phỏng mắt người nhìn
-            await this.page.mouse.wheel({ deltaY: 30 + Math.floor(Math.random() * 30) });
-            await new Promise(r => setTimeout(r, 200));
+            try {
+                await this.page.mouse.wheel({ deltaY: 30 + Math.floor(Math.random() * 30) });
+                await new Promise(r => setTimeout(r, 200));
+            } catch (e) {}
 
-            // Kiểm tra lại trước khi click
             await this.handleHumanVerificationIfNeeded();
 
             // 6. Di chuột thật và bấm chọn đáp án
@@ -425,12 +437,14 @@ class DucthinhBrowser {
                 clickSuccess = await this.smoothMoveAndClick(targetSelector);
             }
             if (!clickSuccess) {
-                const labels = await this.page.$$('label, .ant-radio-wrapper');
-                if (labels[targetIndex]) {
-                    await this.smoothMoveAndClick(labels[targetIndex]);
-                } else if (labels[0]) {
-                    await this.smoothMoveAndClick(labels[0]);
-                }
+                try {
+                    const labels = await this.page.$$('label, .ant-radio-wrapper');
+                    if (labels[targetIndex]) {
+                        await this.smoothMoveAndClick(labels[targetIndex]);
+                    } else if (labels[0]) {
+                        await this.smoothMoveAndClick(labels[0]);
+                    }
+                } catch (e) {}
             }
 
             // 7. Tính toán thời gian giữ câu ngẫu nhiên (tổng thời gian 3s - 5s)
@@ -449,28 +463,30 @@ class DucthinhBrowser {
             process.stdout.write(` -> Chuyển câu!\n\n`);
 
             // 8. Di chuyển chuột tới nút [Tiếp] và click
-            const nextBtn = await this.page.evaluateHandle(() => {
-                const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
-                return buttons.find(b => {
-                    const txt = b.innerText.trim();
-                    return txt === "Tiếp" || txt === "Tiếp theo";
-                }) || null;
-            });
-
-            if (nextBtn && nextBtn.asElement()) {
-                await this.smoothMoveAndClick(nextBtn.asElement());
-            } else {
-                await this.page.evaluate(() => {
+            try {
+                const nextBtn = await this.page.evaluateHandle(() => {
                     const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
-                    for (const b of buttons) {
+                    return buttons.find(b => {
                         const txt = b.innerText.trim();
-                        if (txt === "Tiếp" || txt === "Tiếp theo") {
-                            b.click();
-                            return;
-                        }
-                    }
+                        return txt === "Tiếp" || txt === "Tiếp theo";
+                    }) || null;
                 });
-            }
+
+                if (nextBtn && nextBtn.asElement()) {
+                    await this.smoothMoveAndClick(nextBtn.asElement());
+                } else {
+                    await this.safeEvaluate(() => {
+                        const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
+                        for (const b of buttons) {
+                            const txt = b.innerText.trim();
+                            if (txt === "Tiếp" || txt === "Tiếp theo") {
+                                b.click();
+                                return;
+                            }
+                        }
+                    });
+                }
+            } catch (e) {}
         }
 
         console.log(`\n================================================================================`);
@@ -487,7 +503,6 @@ class DucthinhBrowser {
         console.log("\n[*] Đang tìm và bấm nút [Kết thúc luyện thi] để nộp bài...");
         await new Promise(r => setTimeout(r, 1500));
 
-        // 1. Di chuột và click nút [Kết thúc luyện thi] / [Kết thúc] / [Nộp bài]
         const finishBtn = await this.page.evaluateHandle(() => {
             const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a, div[role="button"]'));
             return buttons.find(b => {
@@ -500,7 +515,7 @@ class DucthinhBrowser {
             await this.smoothMoveAndClick(finishBtn.asElement());
             console.log("[✓] Đã bấm nút: [Kết thúc luyện thi]");
         } else {
-            const clicked = await this.page.evaluate(() => {
+            const clicked = await this.safeEvaluate(() => {
                 const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a, div[role="button"]'));
                 for (const b of buttons) {
                     const txt = b.innerText.trim();
@@ -511,7 +526,7 @@ class DucthinhBrowser {
                 }
                 return { success: false };
             });
-            if (clicked.success) {
+            if (clicked && clicked.success) {
                 console.log(`[✓] Đã bấm: "${clicked.text}"`);
             } else {
                 console.log("[!] Không tìm thấy nút Kết thúc luyện thi (có thể bài đã kết thúc trước đó).");
@@ -520,8 +535,8 @@ class DucthinhBrowser {
 
         await new Promise(r => setTimeout(r, 2000));
 
-        // 2. Xác nhận popup nộp bài nếu có ("Xác nhận", "Đồng ý", "Nộp bài")
-        await this.page.evaluate(() => {
+        // Xác nhận popup nộp bài nếu có ("Xác nhận", "Đồng ý", "Nộp bài")
+        await this.safeEvaluate(() => {
             const modals = Array.from(document.querySelectorAll('.ant-modal, .modal, [role="dialog"], .ant-modal-content'));
             for (const m of modals) {
                 const btns = Array.from(m.querySelectorAll('button, .ant-btn, div.btn'));
@@ -537,8 +552,7 @@ class DucthinhBrowser {
 
         await new Promise(r => setTimeout(r, 3000));
 
-        // 3. Đọc kết quả sau khi nộp bài
-        const resultSummary = await this.page.evaluate(() => {
+        const resultSummary = await this.safeEvaluate(() => {
             const summaryEl = document.querySelector('.result-summary, .exam-result, .practice-result, .ant-card, .result');
             return {
                 title: document.title,
@@ -548,7 +562,7 @@ class DucthinhBrowser {
 
         console.log("\n================================================================================");
         console.log("🎉 ĐÃ NỘP BÀI THÀNH CÔNG VÀ KẾT THÚC BÀI LUYỆN THI!");
-        if (resultSummary.summary) {
+        if (resultSummary && resultSummary.summary) {
             console.log(`\nKết quả chi tiết:\n${resultSummary.summary}\n`);
         }
         console.log("================================================================================\n");
@@ -566,7 +580,7 @@ class DucthinhBrowser {
 
         await this.handleModals();
 
-        const mediaInfo = await this.page.evaluate((rate, mute) => {
+        const mediaInfo = await this.safeEvaluate((rate, mute) => {
             const audios = Array.from(document.querySelectorAll('audio'));
             const videos = Array.from(document.querySelectorAll('video'));
             const activeMedia = videos.find(v => v.duration > 0) || audios.find(a => a.duration > 0) || videos[0] || audios[0];
@@ -590,7 +604,6 @@ class DucthinhBrowser {
                 };
             }
 
-            // Nếu không có thẻ media trực tiếp, thử bấm nút Play trên giao diện
             const playBtn = document.querySelector('.media-audio__play-button, .play-btn, .vjs-big-play-button, .vjs-play-control');
             if (playBtn) {
                 playBtn.click();
@@ -604,27 +617,28 @@ class DucthinhBrowser {
     }
 
     /**
-     * Theo dõi tiến độ phát bài giảng/video cho đến khi hoàn thành
+     * Theo dõi tiến độ phát bài giảng/video cho đến khi hoàn thành (Bảo vệ chống detached Frame)
      */
     async waitForMediaCompletion() {
         if (!this.page) return;
 
         let lastCurrentTime = -1;
         let stuckCount = 0;
+        let nullStatusCount = 0;
 
         while (true) {
             await new Promise(r => setTimeout(r, 2000));
 
-            // Kiểm tra và tạm dừng nếu có Captcha/xác minh người thật
+            // 1. Kiểm tra và tạm dừng nếu có Captcha/xác minh người thật
             await this.handleHumanVerificationIfNeeded();
 
-            const status = await this.page.evaluate(() => {
+            // 2. Lấy trạng thái phát an toàn qua safeEvaluate
+            const status = await this.safeEvaluate(() => {
                 const audios = Array.from(document.querySelectorAll('audio'));
                 const videos = Array.from(document.querySelectorAll('video'));
                 const media = videos.find(v => v.duration > 0) || audios.find(a => a.duration > 0) || videos[0] || audios[0];
 
                 if (media) {
-                    // Đảm bảo vẫn đang phát
                     if (media.paused && media.currentTime < (media.duration - 1)) {
                         media.play().catch(() => {});
                     }
@@ -641,6 +655,14 @@ class DucthinhBrowser {
                 return { exists: false, isEnded: true };
             });
 
+            // Nếu frame đang reload/transition, chờ 1 nhịp thay vì ngắt luồng
+            if (!status) {
+                nullStatusCount++;
+                if (nullStatusCount >= 3) break;
+                continue;
+            }
+            nullStatusCount = 0;
+
             if (!status.exists || status.isEnded) {
                 console.log("\n[✓] Đã phát hoàn thành bài học hiện tại!");
                 break;
@@ -656,7 +678,7 @@ class DucthinhBrowser {
             // Kiểm tra chống kẹt
             if (status.currentTime === lastCurrentTime) {
                 stuckCount++;
-                if (stuckCount >= 10) { // Kẹt quá 20s
+                if (stuckCount >= 10) {
                     console.log("\n[!] Nhận thấy tiến độ không đổi, tự động kích hoạt Play lại...");
                     await this.playCurrentMedia();
                     stuckCount = 0;
@@ -677,8 +699,7 @@ class DucthinhBrowser {
         console.log("\n[*] Chuyển sang bài học tiếp theo...");
         await new Promise(r => setTimeout(r, 1500));
 
-        // 1. Tìm nút "Tiếp theo" ở thanh điều hướng góc dưới
-        const moved = await this.page.evaluate(() => {
+        const moved = await this.safeEvaluate(() => {
             const nextBtn = document.querySelector('.footer-navigator__item-next, [class*="item-next"], .btn-next');
             if (nextBtn) {
                 nextBtn.click();
@@ -696,7 +717,7 @@ class DucthinhBrowser {
             return { success: false };
         });
 
-        if (moved.success) {
+        if (moved && moved.success) {
             console.log(`[✓] Đã bấm: "${moved.text}"`);
             await new Promise(r => setTimeout(r, 4000));
             await this.handleModals();
@@ -760,7 +781,7 @@ class DucthinhBrowser {
         if (!this.page) return;
 
         for (let round = 1; round <= 3; round++) {
-            const handled = await this.page.evaluate(() => {
+            const handled = await this.safeEvaluate(() => {
                 const checkbox = document.querySelector('input[type="checkbox"], .ant-checkbox-input, .ant-checkbox');
                 if (checkbox && !checkbox.checked) {
                     checkbox.click();
@@ -777,7 +798,7 @@ class DucthinhBrowser {
                 return { clicked: false };
             });
 
-            if (handled.clicked) {
+            if (handled && handled.clicked) {
                 console.log(`[+] Đã tự động đóng popup: "${handled.text}"`);
                 await new Promise(r => setTimeout(r, 2000));
             }

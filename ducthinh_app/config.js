@@ -5,10 +5,10 @@ module.exports = {
     domain: "ducthinh",
     baseUrl: "https://ducthinh.huelms.com",
     apiUrl: "https://staging-api.lotuslms.com",
-    
+
     // Thông tin tài khoản mặc định
     account: {
-        username: "025098009525",
+        username: "035099002016",
         password: "123"
     },
 
