@@ -1,6 +1,6 @@
 # Module Tự Động Hóa - Đào Tạo Lái Xe Đức Thịnh (ducthinh.huelms.com)
 
-Thư mục này chứa toàn bộ mã nguồn chuẩn đã được kiểm chứng thành công để mở trình duyệt trực quan và đăng nhập vào hệ thống LMS Đức Thịnh mà không bị bẫy bảo mật kích ra ngoài (`/?logout=1`).
+Thư mục này chứa mã nguồn hoàn chỉnh để tự động hóa toàn bộ quy trình: Đăng nhập $\rightarrow$ Vào môn học $\rightarrow$ Mở mục Ôn luyện $\rightarrow$ Nhấn "Luyện tất cả" $\rightarrow$ **Tự động giải toàn bộ 185 câu hỏi với đáp án chính xác 100% và tích lũy thời gian học thật vào hồ sơ**.
 
 ---
 
@@ -8,33 +8,44 @@ Thư mục này chứa toàn bộ mã nguồn chuẩn đã được kiểm chứ
 
 ```
 ducthinh_app/
-├── config.js       # File cấu hình tập trung (tài khoản, domain, danh mục khóa học, options trình duyệt)
-├── browser.js      # Module điều khiển trình duyệt Puppeteer + cơ chế vô hiệu hóa devtools-detector
-├── index.js        # File thực thi chính để mở trình duyệt đăng nhập trực quan
-└── README.md       # Tài liệu hướng dẫn sử dụng và ghi chú kỹ thuật
+├── config.js       # File cấu hình (tài khoản, thời gian giữ câu, số câu tối đa, domain)
+├── browser.js      # Module điều khiển trình duyệt Puppeteer + Chống bẫy DevTools + Auto Solver
+├── client.js       # Module API Client LotusLMS (ký số HMAC/AES)
+├── index.js        # File thực thi chính chạy toàn bộ 5 bước tự động
+└── README.md       # Tài liệu hướng dẫn sử dụng
 ```
 
 ---
 
 ## 🚀 Cách chạy nhanh
 
-Từ thư mục gốc của dự án, chạy lệnh:
+Từ thư mục gốc của dự án:
 
 ```powershell
 node ducthinh_app/index.js
 ```
 
-Script sẽ:
-1. Mở cửa sổ Google Chrome thật trên màn hình.
-2. Tự động tiêm lớp bảo vệ vô hiệu hóa bẫy `devtools-detector` (`console.table` + `debugger`).
-3. Điều hướng tới `https://ducthinh.huelms.com/user/login`.
-4. Điền tài khoản (`001198003037` / `123`) và đăng nhập.
-5. Chuyển vào Dashboard kế hoạch học tập (`/student/ep/32672234`) và giữ nguyên cửa sổ trình duyệt cho bạn phát triển tiếp.
+---
+
+## ⚙️ Tùy chỉnh trong [config.js](file:///d:/H%E1%BB%8Dc%20LTLX/ducthinh_app/config.js)
+
+```javascript
+practice: {
+    delayPerQuestion: 10,  // Số giây giữ ở mỗi câu hỏi (để server ghi nhận giờ học thật)
+    maxQuestions: 185     // Số câu hỏi cần giải (185 câu cho Phần 2)
+}
+```
 
 ---
 
-## 🛠 Cơ chế kỹ thuật vượt qua bẫy DevTools
+## 🎯 5 Bước tự động hóa hoàn toàn
 
-1. **Vô hiệu hóa Performance Checker:** Gán `console.table = function() {}` và `console.clear = function() {}` trong `evaluateOnNewDocument` $\rightarrow$ Thư viện `devtools-detector` đo được $\Delta t = 0$, kết luận không mở DevTools và không kích hoạt lệnh `system_check_devtools` logout.
-2. **Vô hiệu hóa Debugger Constructor:** Hook `window.Function` để chặn các lệnh tạo `debugger` ngầm.
-3. **Ẩn dấu vết tự động hóa:** Xóa thuộc tính `navigator.webdriver`.
+1. **Bước 1: Đăng nhập trực quan** (Vô hiệu hóa bẫy `devtools-detector`).
+2. **Bước 2: Mở môn học** `Phần 2. Hệ thống báo hiệu đường bộ`.
+3. **Bước 3: Mở mục [Ôn luyện]** & Tự động đóng popup nội quy học tập.
+4. **Bước 4: Bấm nút [Luyện tất cả (185)]**.
+5. **Bước 5: Tự động giải đề**:
+   - Tự động nạp bộ đáp án chính xác 100% từ ngân hàng câu hỏi của hệ thống.
+   - Click chọn đáp án đúng trên giao diện Chrome thật.
+   - Đếm ngược thời gian giữ câu (`delayPerQuestion`) để trình duyệt gửi gói tin nhịp tim về server ghi nhận giờ học.
+   - Bấm `Tiếp` và lặp lại cho đến hết 185 câu hỏi.

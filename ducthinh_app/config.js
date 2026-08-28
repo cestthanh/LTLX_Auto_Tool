@@ -21,7 +21,7 @@ module.exports = {
         phan2: {
             iid: 32672246,
             name: "Phần 2. Hệ thống báo hiệu đường bộ",
-            totalQuestions: 182
+            totalQuestions: 185
         },
         phan3: {
             iid: 32672248,
@@ -29,9 +29,15 @@ module.exports = {
         }
     },
 
+    // Cấu hình luyện thi tự động
+    practice: {
+        delayPerQuestion: 10,  // Số giây giữ ở mỗi câu hỏi (để tích lũy thời gian học thật vào hồ sơ)
+        maxQuestions: 185     // Số câu hỏi tối đa cần làm trong đề
+    },
+
     // Cấu hình trình duyệt
     browser: {
-        headless: false, // Mở cửa sổ trực quan
+        headless: false, // Mở cửa sổ trực quan trên màn hình
         viewport: null,
         args: [
             "--start-maximized",

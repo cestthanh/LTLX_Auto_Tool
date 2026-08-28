@@ -3,7 +3,7 @@ const config = require("./config");
 
 async function main() {
     console.log("================================================================================");
-    console.log("    HỆ THỐNG TỰ ĐỘNG HÓA - ĐÀO TẠO LÁI XE ĐỨC THỊNH (DUCTHINH.HUELMS.COM)     ");
+    console.log("    HỆ THỐNG TỰ ĐỘNG ÔN LUYỆN - ĐÀO TẠO LÁI XE ĐỨC THỊNH (DUCTHINH.HUELMS.COM) ");
     console.log("================================================================================");
     
     const app = new DucthinhBrowser();
@@ -21,14 +21,18 @@ async function main() {
         console.log("\n--- BƯỚC 3: MỞ MỤC [ÔN LUYỆN] & XỬ LÝ POPUP ---");
         await app.openTask("Ôn luyện");
 
-        // Hiển thị thông tin màn hình đạt được
-        const info = await app.getScreenInfo();
-        console.log("\n================================================================================");
-        console.log("[✓] ĐÃ TỰ ĐỘNG ĐẾN MÀN HÌNH ÔN LUYỆN THÀNH CÔNG!");
-        console.log(`[*] URL: ${info.url}`);
-        console.log("================================================================================");
+        // Bước 4: Nhấp nút "Luyện tất cả"
+        console.log("\n--- BƯỚC 4: BẮT ĐẦU [LUYỆN TẤT CẢ] ---");
+        await app.startPracticeAll();
 
-        // Duy trì phiên làm việc trực quan cho người dùng quan sát và tiếp tục phát triển
+        // Bước 5: Tự động giải toàn bộ 185 câu hỏi với đáp án chuẩn 100%
+        console.log("\n--- BƯỚC 5: TỰ ĐỘNG GIẢI CÂU HỎI & TÍCH LŨY GIỜ HỌC ---");
+        await app.solveAllQuestions({
+            delayPerQuestion: config.practice.delayPerQuestion,
+            maxQuestions: config.practice.maxQuestions
+        });
+
+        // Giữ trình duyệt để người dùng xem kết quả
         await app.keepAlive();
     } catch (error) {
         console.error("\n[!] Đã xảy ra lỗi trong quá trình thực thi:", error.message);

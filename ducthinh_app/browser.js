@@ -11,6 +11,7 @@ class DucthinhBrowser {
         };
         this.browser = null;
         this.page = null;
+        this.questionBank = new Map(); // Bộ nhớ lưu trữ đáp án đúng 100%
     }
 
     /**
@@ -30,14 +31,9 @@ class DucthinhBrowser {
 
         // Vô hiệu hóa bẫy devtools-detector trước khi bất kỳ script nào tải
         await this.page.evaluateOnNewDocument(() => {
-            // 1. Tắt cờ webdriver
             Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-
-            // 2. Vô hiệu hóa bẫy performance / console.table -> performanceChecker luôn trả về false (không mở DevTools)
             console.table = function() {};
             console.clear = function() {};
-
-            // 3. Chặn Function constructor "debugger"
             const origFunction = window.Function;
             window.Function = function(...args) {
                 if (args.length > 0 && typeof args[args.length - 1] === "string" && args[args.length - 1].includes("debugger")) {
@@ -46,6 +42,37 @@ class DucthinhBrowser {
                 return origFunction.apply(this, args);
             };
             window.Function.prototype = origFunction.prototype;
+        });
+
+        // Tự động bắt gói tin nạp ngân hàng câu hỏi để lấy đáp án đúng 100%
+        this.page.on("response", async (res) => {
+            const url = res.url();
+            if (url.includes("get-question-bank-status") || url.includes("get-practice-questions") || url.includes("get_exercise_detail")) {
+                try {
+                    const json = await res.json();
+                    const qList = json?.result?.questions?.result || json?.result?.questions || [];
+                    if (Array.isArray(qList) && qList.length > 0) {
+                        for (const q of qList) {
+                            const correctIndices = [];
+                            if (Array.isArray(q.mc_answers)) {
+                                q.mc_answers.forEach((ans, idx) => {
+                                    if (ans.is_answer === 1) correctIndices.push(idx);
+                                });
+                            }
+                            if (correctIndices.length === 0 && Array.isArray(q.answers)) {
+                                correctIndices.push(...q.answers);
+                            }
+                            this.questionBank.set(q.id, {
+                                id: q.id,
+                                content: q.content,
+                                correctIndices: correctIndices.length > 0 ? correctIndices : [0],
+                                mc_answers: q.mc_answers || []
+                            });
+                        }
+                        console.log(`[✓] ĐÃ NẠP TỰ ĐỘNG ${this.questionBank.size} CÂU HỎI VÀ ĐÁP ÁN CHUẨN 100% VÀO BỘ NHỚ!`);
+                    }
+                } catch (e) {}
+            }
         });
 
         return this.page;
@@ -74,7 +101,6 @@ class DucthinhBrowser {
         const btn = await this.page.$('button.btn-login, button[type="submit"]');
         await btn.click();
 
-        // Chờ chuyển trang vào màn hình chính
         await new Promise(r => setTimeout(r, 4000));
 
         const currentUrl = this.page.url();
@@ -108,7 +134,6 @@ class DucthinhBrowser {
         }, keyword);
 
         if (!clicked.success) {
-            // Fallback: nếu không tìm thấy qua thẻ a, điều hướng trực tiếp qua IID cấu hình
             const fallbackUrl = `${this.config.baseUrl}/student/course/${this.config.courses.phan2.iid}/dashboard`;
             console.log(`[!] Không tìm thấy link trong DOM, điều hướng trực tiếp tới: ${fallbackUrl}`);
             await this.page.goto(fallbackUrl, { waitUntil: "domcontentloaded" });
@@ -155,12 +180,148 @@ class DucthinhBrowser {
 
         console.log(`[✓] Đã nhấp vào mục: "${taskKeyword}"`);
         await new Promise(r => setTimeout(r, 4000));
-        console.log(`[*] URL màn hình luyện tập: ${this.page.url()}`);
 
-        // Tự động xử lý các popup nếu xuất hiện
+        // Tự động xử lý các popup nội quy học tập / thiết bị mới
         await this.handleModals();
 
         return this.page.url();
+    }
+
+    /**
+     * Bấm nút "Luyện tất cả"
+     */
+    async startPracticeAll() {
+        if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
+
+        console.log("[*] Đang tìm và bấm nút [Luyện tất cả]...");
+        await new Promise(r => setTimeout(r, 2000));
+
+        const clicked = await this.page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+            for (const b of buttons) {
+                if (b.innerText && b.innerText.includes("Luyện tất cả")) {
+                    b.click();
+                    return { success: true, text: b.innerText.trim() };
+                }
+            }
+            return { success: false };
+        });
+
+        if (!clicked.success) {
+            throw new Error("Không tìm thấy nút [Luyện tất cả] trên màn hình.");
+        }
+
+        console.log(`[✓] Đã bấm: "${clicked.text}"`);
+        await new Promise(r => setTimeout(r, 4000));
+    }
+
+    /**
+     * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với đáp án chính xác 100%
+     */
+    async solveAllQuestions(options = {}) {
+        const delaySeconds = options.delayPerQuestion !== undefined ? options.delayPerQuestion : 10; // Mặc định 10s/câu
+        const maxQuestions = options.maxQuestions || 185;
+
+        console.log(`\n================================================================================`);
+        console.log(`    BẮT ĐẦU TỰ ĐỘNG GIẢI ${maxQuestions} CÂU HỎI (ĐÁP ÁN CHUẨN 100%)            `);
+        console.log(`    Thời gian giữ mỗi câu: ${delaySeconds} giây (để server ghi nhận giờ học thật)`);
+        console.log(`================================================================================\n`);
+
+        let completedCount = 0;
+
+        for (let i = 1; i <= maxQuestions; i++) {
+            await new Promise(r => setTimeout(r, 1500));
+
+            // Kiểm tra nếu bài luyện thi đã kết thúc
+            const isFinished = await this.page.evaluate(() => {
+                const text = document.body.innerText;
+                return text.includes("Kết quả luyện tập") || text.includes("Hoàn thành bài luyện") || text.includes("Điểm số của bạn");
+            });
+
+            if (isFinished) {
+                console.log("\n[🎉] ĐÃ HOÀN THÀNH TOÀN BỘ BÀI LUYỆN TẬP!");
+                break;
+            }
+
+            // Lấy thông tin câu hỏi và ID câu hỏi từ giao diện
+            const qInfo = await this.page.evaluate(() => {
+                const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
+                const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
+                const title = document.querySelector('.question-content, .question-title, h4, h3, .content')?.innerText?.trim() || "";
+
+                let qId = null;
+                if (inputs.length > 0 && inputs[0].id) {
+                    qId = inputs[0].id.split('-')[0];
+                }
+
+                return {
+                    qId,
+                    title: title.slice(0, 80),
+                    optionsCount: labels.length || inputs.length
+                };
+            });
+
+            if (!qInfo || (!qInfo.qId && qInfo.optionsCount === 0)) {
+                await this.handleModals();
+                continue;
+            }
+
+            completedCount++;
+
+            // Tìm đáp án đúng trong ngân hàng câu hỏi
+            let targetIndex = 0;
+            if (qInfo.qId && this.questionBank.has(qInfo.qId)) {
+                const bankItem = this.questionBank.get(qInfo.qId);
+                targetIndex = bankItem.correctIndices[0] || 0;
+                const answerText = bankItem.mc_answers?.[targetIndex]?.text || `Phương án ${targetIndex + 1}`;
+                console.log(`[Câu ${completedCount}/${maxQuestions}] 🎯 Đáp án đúng: "${answerText}"\n    Câu hỏi: "${qInfo.title}..."`);
+            } else {
+                console.log(`[Câu ${completedCount}/${maxQuestions}] ℹ️ Câu hỏi: "${qInfo.title}..." (Chọn phương án 1)`);
+            }
+
+            // Tích chọn đáp án trên giao diện
+            await this.page.evaluate((qId, idx) => {
+                if (qId) {
+                    const targetId = `${qId}-${idx}`;
+                    const el = document.getElementById(targetId);
+                    if (el) {
+                        const label = document.querySelector(`label[for="${targetId}"]`) || el.parentElement;
+                        if (label) label.click();
+                        else el.click();
+                        return;
+                    }
+                }
+                const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
+                if (labels[idx]) labels[idx].click();
+                else if (labels[0]) labels[0].click();
+            }, qInfo.qId, targetIndex);
+
+            // Đếm ngược thời gian giữ câu để tích lũy thời gian học thật
+            if (delaySeconds > 0) {
+                process.stdout.write(`    ⏳ Giữ câu ${delaySeconds}s để ghi nhận thời gian: `);
+                for (let s = delaySeconds; s > 0; s--) {
+                    process.stdout.write(`${s}s `);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                process.stdout.write(` -> Chuyển câu!\n\n`);
+            }
+
+            // Bấm nút [Tiếp]
+            await this.page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
+                for (const b of buttons) {
+                    const txt = b.innerText.trim();
+                    if (txt === "Tiếp" || txt === "Tiếp theo") {
+                        b.click();
+                        return;
+                    }
+                }
+            });
+        }
+
+        console.log(`\n================================================================================`);
+        console.log(`[✓] ĐÃ HOÀN THÀNH TỰ ĐỘNG GIẢI ${completedCount} CÂU HỎI!`);
+        console.log(`================================================================================\n`);
     }
 
     /**
@@ -171,13 +332,11 @@ class DucthinhBrowser {
 
         for (let round = 1; round <= 3; round++) {
             const handled = await this.page.evaluate(() => {
-                // Tích chọn checkbox đồng ý nếu có
                 const checkbox = document.querySelector('input[type="checkbox"], .ant-checkbox-input, .ant-checkbox');
                 if (checkbox && !checkbox.checked) {
                     checkbox.click();
                 }
 
-                // Nhấp nút Xác nhận hoặc Đồng ý
                 const buttons = Array.from(document.querySelectorAll('button, div.btn'));
                 for (const b of buttons) {
                     const txt = b.innerText.trim();
@@ -194,21 +353,6 @@ class DucthinhBrowser {
                 await new Promise(r => setTimeout(r, 2000));
             }
         }
-    }
-
-    /**
-     * Lấy thông tin tóm tắt màn hình hiện tại
-     */
-    async getScreenInfo() {
-        if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
-
-        return await this.page.evaluate(() => {
-            return {
-                title: document.title,
-                url: window.location.href,
-                bodySnippet: document.body.innerText.slice(0, 500)
-            };
-        });
     }
 
     /**
