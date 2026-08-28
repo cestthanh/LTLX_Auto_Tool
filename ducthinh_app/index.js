@@ -2,22 +2,49 @@ const DucthinhBrowser = require("./browser");
 const config = require("./config");
 
 async function main() {
-    // Đọc số câu hỏi từ tham số dòng lệnh (nếu có): ví dụ "node ducthinh_app/index.js 30"
+    // Đọc tham số dòng lệnh linh hoạt:
+    // Cú pháp 1: node ducthinh_app/index.js [số_câu]
+    // Cú pháp 2: node ducthinh_app/index.js [số_câu] [tài_khoản] [mật_khẩu]
+    // Cú pháp 3: node ducthinh_app/index.js [tài_khoản] [mật_khẩu]
     const args = process.argv.slice(2);
-    const cliQuestions = args[0] ? parseInt(args[0], 10) : null;
-    const maxQuestions = cliQuestions && !isNaN(cliQuestions) ? cliQuestions : config.practice.maxQuestions;
+    let maxQuestions = config.practice.maxQuestions;
+    let username = config.account.username;
+    let password = config.account.password;
+
+    if (args.length === 1) {
+        if (!isNaN(parseInt(args[0], 10)) && args[0].length < 6) {
+            maxQuestions = parseInt(args[0], 10);
+        } else {
+            username = args[0];
+        }
+    } else if (args.length === 2) {
+        if (!isNaN(parseInt(args[0], 10)) && args[0].length < 6) {
+            maxQuestions = parseInt(args[0], 10);
+            username = args[1];
+        } else {
+            username = args[0];
+            password = args[1];
+        }
+    } else if (args.length >= 3) {
+        maxQuestions = parseInt(args[0], 10);
+        username = args[1];
+        password = args[2];
+    }
 
     console.log("================================================================================");
     console.log("    HỆ THỐNG TỰ ĐỘNG ÔN LUYỆN - ĐÀO TẠO LÁI XE ĐỨC THỊNH (DUCTHINH.HUELMS.COM) ");
+    console.log(`    TÀI KHOẢN HỌC VIÊN: ${username}                                            `);
     console.log(`    SỐ CÂU HỎI CẦN LÀM: ${maxQuestions} CÂU                                     `);
     console.log("================================================================================");
     
-    const app = new DucthinhBrowser();
+    const app = new DucthinhBrowser({
+        account: { username, password }
+    });
 
     try {
         // Bước 1: Mở trình duyệt và đăng nhập
         console.log("\n--- BƯỚC 1: ĐĂNG NHẬP ---");
-        await app.login();
+        await app.login(username, password);
 
         // Bước 2: Nhấp vào môn học [Phần 2. Hệ thống báo hiệu đường bộ]
         console.log("\n--- BƯỚC 2: MỞ KHÓA HỌC [PHẦN 2] ---");
