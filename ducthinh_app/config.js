@@ -29,11 +29,11 @@ module.exports = {
         }
     },
 
-    // Cấu hình luyện thi mô phỏng người thật
+    // Cấu hình luyện thi tốc độ nhanh (Tối đa 5s/câu)
     practice: {
-        minDelayPerQuestion: 15, // Thời gian giữ tối thiểu mỗi câu (giây)
-        maxDelayPerQuestion: 25, // Thời gian giữ tối đa mỗi câu (giây)
-        readTimePerQuestion: 3,  // Thời gian giả lập đọc đề trước khi bấm chọn (giây)
+        minDelayPerQuestion: 3,  // Thời gian giữ tối thiểu mỗi câu (giây)
+        maxDelayPerQuestion: 5,  // Thời gian giữ tối đa mỗi câu (giây)
+        readTimePerQuestion: 1,  // Thời gian giả lập đọc đề nhanh (giây)
         maxQuestions: 185        // Số câu hỏi tối đa cần làm trong đề
     },
 

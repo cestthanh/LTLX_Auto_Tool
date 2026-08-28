@@ -310,19 +310,19 @@ class DucthinhBrowser {
      * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với MÔ PHỎNG HÀNH VI & SMART RESUME
      */
     async solveAllQuestions(options = {}) {
-        const minDelay = options.minDelayPerQuestion || this.config.practice.minDelayPerQuestion || 15;
-        const maxDelay = options.maxDelayPerQuestion || this.config.practice.maxDelayPerQuestion || 25;
+        const minDelay = options.minDelayPerQuestion || this.config.practice.minDelayPerQuestion || 3;
+        const maxDelay = options.maxDelayPerQuestion || this.config.practice.maxDelayPerQuestion || 5;
         const maxQuestions = options.maxQuestions || this.config.practice.maxQuestions || 185;
 
         console.log(`\n================================================================================`);
         console.log(`    BẮT ĐẦU TỰ ĐỘNG GIẢI ${maxQuestions} CÂU HỎI (TỰ ĐỘNG TẠM DỪNG / TIẾP TỤC)     `);
-        console.log(`    Thời gian giữ mỗi câu ngẫu nhiên: ${minDelay}s - ${maxDelay}s (tích lũy giờ học thật)`);
+        console.log(`    Thời gian giữ mỗi câu tối đa: ${maxDelay}s (siêu tốc & tự nhiên)`);
         console.log(`================================================================================\n`);
 
         let completedCount = 0;
 
         for (let i = 1; i <= maxQuestions; i++) {
-            await new Promise(r => setTimeout(r, 1200));
+            await new Promise(r => setTimeout(r, 600));
 
             // 1. Kiểm tra và tạm dừng nếu có Captcha / Xác minh người thật
             await this.handleHumanVerificationIfNeeded();
@@ -374,8 +374,8 @@ class DucthinhBrowser {
                 console.log(`[Câu ${completedCount}/${maxQuestions}] ℹ️ Câu hỏi: "${qInfo.title}..." (Chọn phương án 1)`);
             }
 
-            // 5. Mô phỏng đọc đề: Chờ ngẫu nhiên 2 - 4 giây + cuộn nhẹ trang
-            const readTime = 2 + Math.floor(Math.random() * 3);
+            // 5. Mô phỏng đọc đề nhanh (1s) + cuộn nhẹ trang
+            const readTime = Math.max(1, this.config.practice.readTimePerQuestion || 1);
             process.stdout.write(`    📖 Đang đọc đề (${readTime}s) `);
             for (let r = 0; r < readTime; r++) {
                 process.stdout.write(".");
@@ -384,8 +384,8 @@ class DucthinhBrowser {
             process.stdout.write("\n");
 
             // Cuộn trang nhẹ nhàng mô phỏng mắt người nhìn
-            await this.page.mouse.wheel({ deltaY: 50 + Math.floor(Math.random() * 50) });
-            await new Promise(r => setTimeout(r, 400));
+            await this.page.mouse.wheel({ deltaY: 30 + Math.floor(Math.random() * 30) });
+            await new Promise(r => setTimeout(r, 200));
 
             // Kiểm tra lại trước khi click
             await this.handleHumanVerificationIfNeeded();
@@ -406,17 +406,17 @@ class DucthinhBrowser {
                 }
             }
 
-            // 7. Tính toán thời gian giữ câu ngẫu nhiên (để tích lũy giờ học thật)
+            // 7. Tính toán thời gian giữ câu ngẫu nhiên (tổng thời gian 3s - 5s)
             const remainingDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay - readTime;
-            const actualDelay = Math.max(8, remainingDelay);
+            const actualDelay = Math.max(1, remainingDelay);
 
-            process.stdout.write(`    ⏳ Giữ câu ${actualDelay}s để ghi nhận thời gian: `);
+            process.stdout.write(`    ⏳ Giữ câu ${actualDelay}s: `);
             for (let s = actualDelay; s > 0; s--) {
                 process.stdout.write(`${s}s `);
                 await new Promise(res => setTimeout(res, 1000));
                 
                 // Kiểm tra xem có popup nhảy ra trong lúc giữ câu không
-                if (s % 3 === 0) {
+                if (s % 2 === 0) {
                     await this.handleHumanVerificationIfNeeded();
                 }
             }
