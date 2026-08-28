@@ -735,31 +735,31 @@ class DucthinhBrowser {
         if (!this.page) return;
 
         console.log("[*] Đang quét danh mục bài học để tìm bài CHƯA HỌC (bỏ qua các bài đã học)...");
-        await new Promise(r => setTimeout(r, 2500));
+        await new Promise(r => setTimeout(r, 4000));
+        await this.handleModals();
 
         const result = await this.safeEvaluate(() => {
-            // Mở rộng tất cả các nhánh cây bài học nếu bị đóng
-            const closedSwitchers = Array.from(document.querySelectorAll('.ant-tree-switcher_close, [class*="switcher_close"]'));
-            for (const sw of closedSwitchers) {
-                try { sw.click(); } catch(e) {}
-            }
-
-            const allNodes = Array.from(document.querySelectorAll('.ant-tree-node-content-wrapper, .learning-syllabus-item, [class*="tree-node"], .ant-menu-item, a.item'));
+            // Lấy tất cả các mục bài học trong sidebar của LotusLMS
+            const navItems = Array.from(document.querySelectorAll('.learn-nav-item, tr.row-item'));
             
-            for (let i = 0; i < allNodes.length; i++) {
-                const node = allNodes[i];
-                const text = node.innerText ? node.innerText.trim() : "";
-                if (!text || text.length < 2) continue;
+            for (let i = 0; i < navItems.length; i++) {
+                const item = navItems[i];
+                const textEl = item.querySelector('.learn-nav-item__title, .title') || item;
+                const text = textEl.innerText ? textEl.innerText.trim().replace(/\n/g, ' - ') : "";
+                
+                // Kiểm tra trạng thái hoàn thành: class chứa "--finish" hoặc title="Bạn đã hoàn thành phần này"
+                const statusEl = item.querySelector('.learn-nav-item__status');
+                const statusClass = statusEl ? statusEl.className : "";
+                const isFinished = statusClass.includes('--finish') || (statusEl && statusEl.getAttribute('title') === 'Bạn đã hoàn thành phần này');
 
-                // Kiểm tra xem bài học này đã có tích xanh hoàn thành chưa
-                const parent = node.closest('.ant-tree-treenode') || node.parentElement || node;
-                const html = parent.innerHTML || "";
-                const isCompleted = html.includes('anticon-check') || html.includes('ti-check') || html.includes('icon-check') || html.includes('✓') || html.includes('check-circle') || parent.classList.contains('passed') || parent.classList.contains('completed');
-
-                // Nếu chưa hoàn thành -> Nhấp vào bài này ngay lập tức!
-                if (!isCompleted) {
-                    node.click();
-                    return { success: true, jumped: true, title: text.replace(/\n/g, ' - ') };
+                // Nếu bài này CHƯA HOÀN THÀNH (chưa học hoặc đang học dở dang)
+                if (!isFinished && text.length > 0 && !text.includes("Chương") && !text.includes("Kiểm tra")) {
+                    // Tìm link hoặc thẻ bấm
+                    const clickTarget = item.closest('a') || item.querySelector('a') || item.closest('tr') || item;
+                    if (clickTarget) {
+                        clickTarget.click();
+                        return { success: true, jumped: true, title: text, index: i + 1 };
+                    }
                 }
             }
 
@@ -767,7 +767,11 @@ class DucthinhBrowser {
         });
 
         if (result && result.jumped) {
-            console.log(`[✓] ĐÃ TỰ ĐỘNG CHUYỂN ĐẾN BÀI CHƯA HỌC: "${result.title}"`);
+            console.log(`\n================================================================================`);
+            console.log(`[🎯 TÌM THẤY BÀI CHƯA HOÀN THÀNH]`);
+            console.log(`👉 Tự động nhảy thẳng đến: "${result.title}" (Bài số ${result.index})`);
+            console.log(`   (Đã bỏ qua toàn bộ các bài đã hoàn thành trước đó)`);
+            console.log(`================================================================================\n`);
             await new Promise(r => setTimeout(r, 4000));
             await this.handleModals();
         } else {
