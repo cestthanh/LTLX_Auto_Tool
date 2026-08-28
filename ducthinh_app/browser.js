@@ -16,22 +16,28 @@ class DucthinhBrowser {
     }
 
     /**
-     * Khởi chạy trình duyệt và tiêm cơ chế vô hiệu hóa bẫy devtools-detector
+     * Khởi chạy trình duyệt và tiêm cơ chế Always-Active + Bypass DevTools
      */
     async launch() {
-        console.log("[*] Khởi chạy trình duyệt Chrome trực quan...");
+        console.log("[*] Khởi chạy trình duyệt Chrome trực quan (Hỗ trợ chạy ngầm / Chuyển màn hình)...");
         this.browser = await puppeteer.launch({
             headless: this.config.browser.headless,
             defaultViewport: this.config.browser.viewport,
-            args: this.config.browser.args
+            args: [
+                ...this.config.browser.args,
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding"
+            ]
         });
 
         const pages = await this.browser.pages();
         this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
         await this.page.setUserAgent(this.config.browser.userAgent);
 
-        // Vô hiệu hóa bẫy devtools-detector trước khi bất kỳ script nào tải
+        // 1. Vô hiệu hóa bẫy devtools + Khóa cứng trạng thái Always-Visible / Always-Focused
         await this.page.evaluateOnNewDocument(() => {
+            // Bypass automation detection
             Object.defineProperty(navigator, "webdriver", { get: () => undefined });
             console.table = function() {};
             console.clear = function() {};
@@ -43,9 +49,23 @@ class DucthinhBrowser {
                 return origFunction.apply(this, args);
             };
             window.Function.prototype = origFunction.prototype;
+
+            // 🛡️ ALWAYS-VISIBLE & ALWAYS-FOCUSED (Cho phép chuyển tab / tắt màn hình không bị cảnh báo)
+            Object.defineProperty(document, "visibilityState", { get: () => "visible" });
+            Object.defineProperty(document, "hidden", { get: () => false });
+            Object.defineProperty(document, "webkitVisibilityState", { get: () => "visible" });
+            Object.defineProperty(document, "webkitHidden", { get: () => false });
+            document.hasFocus = () => true;
+
+            // Chặn các sự kiện báo chuyển tab / mất tiêu điểm
+            window.addEventListener("visibilitychange", (e) => e.stopImmediatePropagation(), true);
+            document.addEventListener("visibilitychange", (e) => e.stopImmediatePropagation(), true);
+            window.addEventListener("webkitvisibilitychange", (e) => e.stopImmediatePropagation(), true);
+            window.addEventListener("blur", (e) => e.stopImmediatePropagation(), true);
+            window.addEventListener("focusout", (e) => e.stopImmediatePropagation(), true);
         });
 
-        // Tự động bắt gói tin nạp ngân hàng câu hỏi để lấy đáp án đúng 100%
+        // 2. Tự động bắt gói tin nạp ngân hàng câu hỏi để lấy đáp án đúng 100%
         this.page.on("response", async (res) => {
             const url = res.url();
             if (url.includes("get-question-bank-status") || url.includes("get-practice-questions") || url.includes("get_exercise_detail")) {
