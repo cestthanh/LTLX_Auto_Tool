@@ -7,7 +7,8 @@ class DucthinhBrowser {
             ...config,
             ...options,
             account: { ...config.account, ...(options.account || {}) },
-            browser: { ...config.browser, ...(options.browser || {}) }
+            browser: { ...config.browser, ...(options.browser || {}) },
+            practice: { ...config.practice, ...(options.practice || {}) }
         };
         this.browser = null;
         this.page = null;
@@ -76,6 +77,33 @@ class DucthinhBrowser {
         });
 
         return this.page;
+    }
+
+    /**
+     * Di chuyển chuột mượt mà tới vị trí mục tiêu
+     */
+    async smoothMoveAndClick(selectorOrHandle) {
+        let box = null;
+        if (typeof selectorOrHandle === "string") {
+            const el = await this.page.$(selectorOrHandle);
+            if (el) box = await el.boundingBox();
+        } else if (selectorOrHandle && selectorOrHandle.boundingBox) {
+            box = await selectorOrHandle.boundingBox();
+        }
+
+        if (box) {
+            // Tọa độ ngẫu nhiên bên trong phần tử
+            const targetX = box.x + box.width * (0.3 + Math.random() * 0.4);
+            const targetY = box.y + box.height * (0.3 + Math.random() * 0.4);
+
+            // Di chuyển chuột mượt mà với nhiều bước
+            const steps = 12 + Math.floor(Math.random() * 10);
+            await this.page.mouse.move(targetX, targetY, { steps });
+            await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 150)));
+            await this.page.mouse.click(targetX, targetY);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -216,23 +244,38 @@ class DucthinhBrowser {
     }
 
     /**
-     * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với đáp án chính xác 100%
+     * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với MÔ PHỎNG HÀNH VI NGƯỜI THẬT
      */
     async solveAllQuestions(options = {}) {
-        const delaySeconds = options.delayPerQuestion !== undefined ? options.delayPerQuestion : 10; // Mặc định 10s/câu
-        const maxQuestions = options.maxQuestions || 185;
+        const minDelay = options.minDelayPerQuestion || this.config.practice.minDelayPerQuestion || 15;
+        const maxDelay = options.maxDelayPerQuestion || this.config.practice.maxDelayPerQuestion || 25;
+        const maxQuestions = options.maxQuestions || this.config.practice.maxQuestions || 185;
 
         console.log(`\n================================================================================`);
-        console.log(`    BẮT ĐẦU TỰ ĐỘNG GIẢI ${maxQuestions} CÂU HỎI (ĐÁP ÁN CHUẨN 100%)            `);
-        console.log(`    Thời gian giữ mỗi câu: ${delaySeconds} giây (để server ghi nhận giờ học thật)`);
+        console.log(`    BẮT ĐẦU TỰ ĐỘNG GIẢI ${maxQuestions} CÂU HỎI (MÔ PHỎNG HÀNH VI TỰ NHIÊN)     `);
+        console.log(`    Thời gian giữ mỗi câu ngẫu nhiên: ${minDelay}s - ${maxDelay}s (tích lũy giờ học thật)`);
         console.log(`================================================================================\n`);
 
         let completedCount = 0;
 
         for (let i = 1; i <= maxQuestions; i++) {
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 1200));
 
-            // Kiểm tra nếu bài luyện thi đã kết thúc
+            // 1. Kiểm tra nếu có cảnh báo khóa tài khoản
+            const lockCheck = await this.page.evaluate(() => {
+                const bodyText = document.body.innerText;
+                if (bodyText.includes("Tài khoản tạm thời bị khóa") || bodyText.includes("hoạt động bất thường")) {
+                    return true;
+                }
+                return false;
+            });
+
+            if (lockCheck) {
+                console.log("\n🚨 [CẢNH BÁO] Phát hiện hộp thoại khóa tài khoản trên màn hình! Dừng quá trình giải.");
+                break;
+            }
+
+            // 2. Kiểm tra nếu bài luyện thi đã kết thúc
             const isFinished = await this.page.evaluate(() => {
                 const text = document.body.innerText;
                 return text.includes("Kết quả luyện tập") || text.includes("Hoàn thành bài luyện") || text.includes("Điểm số của bạn");
@@ -243,7 +286,7 @@ class DucthinhBrowser {
                 break;
             }
 
-            // Lấy thông tin câu hỏi và ID câu hỏi từ giao diện
+            // 3. Lấy thông tin câu hỏi và ID câu hỏi từ giao diện
             const qInfo = await this.page.evaluate(() => {
                 const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
                 const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
@@ -268,7 +311,7 @@ class DucthinhBrowser {
 
             completedCount++;
 
-            // Tìm đáp án đúng trong ngân hàng câu hỏi
+            // 4. Tìm đáp án đúng trong ngân hàng câu hỏi
             let targetIndex = 0;
             if (qInfo.qId && this.questionBank.has(qInfo.qId)) {
                 const bankItem = this.questionBank.get(qInfo.qId);
@@ -279,44 +322,70 @@ class DucthinhBrowser {
                 console.log(`[Câu ${completedCount}/${maxQuestions}] ℹ️ Câu hỏi: "${qInfo.title}..." (Chọn phương án 1)`);
             }
 
-            // Tích chọn đáp án trên giao diện
-            await this.page.evaluate((qId, idx) => {
-                if (qId) {
-                    const targetId = `${qId}-${idx}`;
-                    const el = document.getElementById(targetId);
-                    if (el) {
-                        const label = document.querySelector(`label[for="${targetId}"]`) || el.parentElement;
-                        if (label) label.click();
-                        else el.click();
-                        return;
-                    }
-                }
-                const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
-                if (labels[idx]) labels[idx].click();
-                else if (labels[0]) labels[0].click();
-            }, qInfo.qId, targetIndex);
+            // 5. Mô phỏng đọc đề: Chờ ngẫu nhiên 2 - 4 giây + cuộn nhẹ trang
+            const readTime = 2 + Math.floor(Math.random() * 3);
+            process.stdout.write(`    📖 Đang đọc đề (${readTime}s) `);
+            for (let r = 0; r < readTime; r++) {
+                process.stdout.write(".");
+                await new Promise(res => setTimeout(res, 1000));
+            }
+            process.stdout.write("\n");
 
-            // Đếm ngược thời gian giữ câu để tích lũy thời gian học thật
-            if (delaySeconds > 0) {
-                process.stdout.write(`    ⏳ Giữ câu ${delaySeconds}s để ghi nhận thời gian: `);
-                for (let s = delaySeconds; s > 0; s--) {
-                    process.stdout.write(`${s}s `);
-                    await new Promise(r => setTimeout(r, 1000));
+            // Cuộn trang nhẹ nhàng mô phỏng mắt người nhìn
+            await this.page.mouse.wheel({ deltaY: 50 + Math.floor(Math.random() * 50) });
+            await new Promise(r => setTimeout(r, 400));
+
+            // 6. Di chuột thật và bấm chọn đáp án
+            let clickSuccess = false;
+            if (qInfo.qId) {
+                const targetSelector = `label[for="${qInfo.qId}-${targetIndex}"]`;
+                clickSuccess = await this.smoothMoveAndClick(targetSelector);
+            }
+            if (!clickSuccess) {
+                // Fallback click trực quan
+                const labels = await this.page.$$('label, .ant-radio-wrapper');
+                if (labels[targetIndex]) {
+                    await this.smoothMoveAndClick(labels[targetIndex]);
+                } else if (labels[0]) {
+                    await this.smoothMoveAndClick(labels[0]);
                 }
-                process.stdout.write(` -> Chuyển câu!\n\n`);
             }
 
-            // Bấm nút [Tiếp]
-            await this.page.evaluate(() => {
+            // 7. Tính toán thời gian giữ câu ngẫu nhiên (để tích lũy giờ học thật)
+            const remainingDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay - readTime;
+            const actualDelay = Math.max(8, remainingDelay);
+
+            process.stdout.write(`    ⏳ Giữ câu ${actualDelay}s để ghi nhận thời gian: `);
+            for (let s = actualDelay; s > 0; s--) {
+                process.stdout.write(`${s}s `);
+                await new Promise(res => setTimeout(res, 1000));
+            }
+            process.stdout.write(` -> Chuyển câu!\n\n`);
+
+            // 8. Di chuyển chuột tới nút [Tiếp] và click
+            const nextBtn = await this.page.evaluateHandle(() => {
                 const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
-                for (const b of buttons) {
+                return buttons.find(b => {
                     const txt = b.innerText.trim();
-                    if (txt === "Tiếp" || txt === "Tiếp theo") {
-                        b.click();
-                        return;
-                    }
-                }
+                    return txt === "Tiếp" || txt === "Tiếp theo";
+                }) || null;
             });
+
+            if (nextBtn && nextBtn.asElement()) {
+                await this.smoothMoveAndClick(nextBtn.asElement());
+            } else {
+                // Fallback nếu không bắt được element handle
+                await this.page.evaluate(() => {
+                    const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
+                    for (const b of buttons) {
+                        const txt = b.innerText.trim();
+                        if (txt === "Tiếp" || txt === "Tiếp theo") {
+                            b.click();
+                            return;
+                        }
+                    }
+                });
+            }
         }
 
         console.log(`\n================================================================================`);
