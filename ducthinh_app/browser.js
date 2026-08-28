@@ -3,7 +3,12 @@ const config = require("./config");
 
 class DucthinhBrowser {
     constructor(options = {}) {
-        this.config = { ...config, ...options };
+        this.config = {
+            ...config,
+            ...options,
+            account: { ...config.account, ...(options.account || {}) },
+            browser: { ...config.browser, ...(options.browser || {}) }
+        };
         this.browser = null;
         this.page = null;
     }
@@ -54,10 +59,10 @@ class DucthinhBrowser {
 
         const loginUrl = `${this.config.baseUrl}/user/login`;
         console.log(`[*] Đang truy cập ${loginUrl}...`);
-        await this.page.goto(loginUrl, { waitUntil: "networkidle2" });
+        await this.page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
 
         console.log(`[*] Nhập tài khoản: ${username}`);
-        await this.page.waitForSelector('input[name="lname"], input[type="text"]', { timeout: 15000 });
+        await this.page.waitForSelector('input[name="lname"], input[type="text"]', { timeout: 20000 });
         
         const userInput = await this.page.$('input[name="lname"], input[type="text"]');
         await userInput.type(username, { delay: 40 });
@@ -70,7 +75,7 @@ class DucthinhBrowser {
         await btn.click();
 
         // Chờ chuyển trang vào màn hình chính
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 4000));
 
         const currentUrl = this.page.url();
         if (currentUrl.includes("/user/login")) {
@@ -83,20 +88,125 @@ class DucthinhBrowser {
     }
 
     /**
-     * Lấy thông tin học viên và danh sách môn học trên màn hình chính
+     * Nhấp vào môn học theo tên (Ví dụ: "Phần 2. Hệ thống báo hiệu đường bộ")
      */
-    async getDashboardInfo() {
+    async openCourse(keyword = "Phần 2. Hệ thống báo hiệu đường bộ") {
+        if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
+        
+        console.log(`[*] Đang tìm và nhấp vào khóa học: "${keyword}"...`);
+        await this.page.waitForSelector('a, tr, td', { timeout: 20000 });
+
+        const clicked = await this.page.evaluate((kw) => {
+            const links = Array.from(document.querySelectorAll('a'));
+            for (const a of links) {
+                if (a.innerText && a.innerText.toLowerCase().includes(kw.toLowerCase())) {
+                    a.click();
+                    return { success: true, text: a.innerText.trim(), href: a.href };
+                }
+            }
+            return { success: false };
+        }, keyword);
+
+        if (!clicked.success) {
+            // Fallback: nếu không tìm thấy qua thẻ a, điều hướng trực tiếp qua IID cấu hình
+            const fallbackUrl = `${this.config.baseUrl}/student/course/${this.config.courses.phan2.iid}/dashboard`;
+            console.log(`[!] Không tìm thấy link trong DOM, điều hướng trực tiếp tới: ${fallbackUrl}`);
+            await this.page.goto(fallbackUrl, { waitUntil: "domcontentloaded" });
+        } else {
+            console.log(`[✓] Đã nhấp vào môn học: "${clicked.text}"`);
+        }
+
+        await new Promise(r => setTimeout(r, 3000));
+        console.log(`[*] URL trang môn học: ${this.page.url()}`);
+        return this.page.url();
+    }
+
+    /**
+     * Nhấp vào nhiệm vụ trong bảng tổng quan môn học (Ví dụ: "Ôn luyện")
+     */
+    async openTask(taskKeyword = "Ôn luyện") {
+        if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
+
+        console.log(`[*] Đang tìm và nhấp vào mục: "${taskKeyword}"...`);
+        await this.page.waitForSelector('table, tr, a, button', { timeout: 20000 });
+
+        const clicked = await this.page.evaluate((kw) => {
+            const rows = Array.from(document.querySelectorAll('tr'));
+            for (const row of rows) {
+                if (row.innerText && row.innerText.toLowerCase().includes(kw.toLowerCase())) {
+                    const link = row.querySelector('a');
+                    if (link) {
+                        link.click();
+                        return { success: true, text: link.innerText.trim(), href: link.href };
+                    }
+                    const btn = row.querySelector('button, div[role="button"]');
+                    if (btn) {
+                        btn.click();
+                        return { success: true, text: btn.innerText.trim(), href: null };
+                    }
+                }
+            }
+            return { success: false };
+        }, taskKeyword);
+
+        if (!clicked.success) {
+            throw new Error(`Không tìm thấy mục: "${taskKeyword}" trên bảng chi tiết môn học.`);
+        }
+
+        console.log(`[✓] Đã nhấp vào mục: "${taskKeyword}"`);
+        await new Promise(r => setTimeout(r, 4000));
+        console.log(`[*] URL màn hình luyện tập: ${this.page.url()}`);
+
+        // Tự động xử lý các popup nếu xuất hiện
+        await this.handleModals();
+
+        return this.page.url();
+    }
+
+    /**
+     * Tự động xác nhận các popup nội quy học tập hoặc thiết bị mới nếu xuất hiện
+     */
+    async handleModals() {
+        if (!this.page) return;
+
+        for (let round = 1; round <= 3; round++) {
+            const handled = await this.page.evaluate(() => {
+                // Tích chọn checkbox đồng ý nếu có
+                const checkbox = document.querySelector('input[type="checkbox"], .ant-checkbox-input, .ant-checkbox');
+                if (checkbox && !checkbox.checked) {
+                    checkbox.click();
+                }
+
+                // Nhấp nút Xác nhận hoặc Đồng ý
+                const buttons = Array.from(document.querySelectorAll('button, div.btn'));
+                for (const b of buttons) {
+                    const txt = b.innerText.trim();
+                    if (txt === "Đồng ý" || txt.includes("Tôi đồng ý") || txt === "Xác nhận") {
+                        b.click();
+                        return { clicked: true, text: txt };
+                    }
+                }
+                return { clicked: false };
+            });
+
+            if (handled.clicked) {
+                console.log(`[+] Đã tự động đóng popup: "${handled.text}"`);
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+    }
+
+    /**
+     * Lấy thông tin tóm tắt màn hình hiện tại
+     */
+    async getScreenInfo() {
         if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
 
         return await this.page.evaluate(() => {
-            const userNameEl = document.querySelector(".user-name, .profile-name, h1, h2, h3");
-            const courseRows = Array.from(document.querySelectorAll("table tr, .course-item, tr"));
-            
             return {
                 title: document.title,
                 url: window.location.href,
-                userName: userNameEl ? userNameEl.innerText.trim() : "Unknown",
-                rowCount: courseRows.length
+                bodySnippet: document.body.innerText.slice(0, 500)
             };
         });
     }

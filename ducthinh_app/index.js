@@ -9,18 +9,29 @@ async function main() {
     const app = new DucthinhBrowser();
 
     try {
-        // 1. Mở trình duyệt và đăng nhập
+        // Bước 1: Mở trình duyệt và đăng nhập
+        console.log("\n--- BƯỚC 1: ĐĂNG NHẬP ---");
         await app.login();
 
-        // 2. Lấy thông tin Dashboard
-        const info = await app.getDashboardInfo();
-        console.log(`[+] Xin chào: ${info.userName}`);
-        console.log(`[+] Đang ở trang: ${info.title} (${info.url})`);
+        // Bước 2: Nhấp vào môn học [Phần 2. Hệ thống báo hiệu đường bộ]
+        console.log("\n--- BƯỚC 2: MỞ KHÓA HỌC [PHẦN 2] ---");
+        await app.openCourse("Phần 2. Hệ thống báo hiệu đường bộ");
 
-        // 3. Giữ trình duyệt để phát triển các tính năng tiếp theo
+        // Bước 3: Nhấp vào mục [Ôn luyện] và tự động xử lý các popup
+        console.log("\n--- BƯỚC 3: MỞ MỤC [ÔN LUYỆN] & XỬ LÝ POPUP ---");
+        await app.openTask("Ôn luyện");
+
+        // Hiển thị thông tin màn hình đạt được
+        const info = await app.getScreenInfo();
+        console.log("\n================================================================================");
+        console.log("[✓] ĐÃ TỰ ĐỘNG ĐẾN MÀN HÌNH ÔN LUYỆN THÀNH CÔNG!");
+        console.log(`[*] URL: ${info.url}`);
+        console.log("================================================================================");
+
+        // Duy trì phiên làm việc trực quan cho người dùng quan sát và tiếp tục phát triển
         await app.keepAlive();
     } catch (error) {
-        console.error("[!] Đã xảy ra lỗi:", error.message);
+        console.error("\n[!] Đã xảy ra lỗi trong quá trình thực thi:", error.message);
     }
 }
 
