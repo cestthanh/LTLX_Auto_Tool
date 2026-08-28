@@ -2,11 +2,13 @@ const DucthinhBrowser = require("./browser");
 const config = require("./config");
 
 async function main() {
-    // Đọc tham số dòng lệnh linh hoạt:
-    // Cú pháp 1: node ducthinh_app/index.js [số_câu]
-    // Cú pháp 2: node ducthinh_app/index.js [số_câu] [tài_khoản] [mật_khẩu]
-    // Cú pháp 3: node ducthinh_app/index.js [tài_khoản] [mật_khẩu]
-    const args = process.argv.slice(2);
+    // Hỗ trợ tham số linh hoạt:
+    // node ducthinh_app/index.js [số_câu] [--headless]
+    // node ducthinh_app/index.js [số_câu] [tài_khoản] [mật_khẩu] [--headless]
+    const rawArgs = process.argv.slice(2);
+    const isHeadlessCli = rawArgs.includes("--headless") || rawArgs.includes("-h");
+    const args = rawArgs.filter(a => a !== "--headless" && a !== "-h");
+
     let maxQuestions = config.practice.maxQuestions;
     let username = config.account.username;
     let password = config.account.password;
@@ -31,14 +33,18 @@ async function main() {
         password = args[2];
     }
 
+    const headlessMode = isHeadlessCli ? "new" : config.browser.headless;
+
     console.log("================================================================================");
     console.log("    HỆ THỐNG TỰ ĐỘNG ÔN LUYỆN - ĐÀO TẠO LÁI XE ĐỨC THỊNH (DUCTHINH.HUELMS.COM) ");
     console.log(`    TÀI KHOẢN HỌC VIÊN: ${username}                                            `);
     console.log(`    SỐ CÂU HỎI CẦN LÀM: ${maxQuestions} CÂU                                     `);
+    console.log(`    CHẾ ĐỘ HIỂN THỊ   : ${headlessMode === "new" ? "CHẠY ẨN (HEADLESS)" : "TRỰC QUAN (VISIBLE)"}`);
     console.log("================================================================================");
     
     const app = new DucthinhBrowser({
-        account: { username, password }
+        account: { username, password },
+        browser: { headless: headlessMode }
     });
 
     try {
