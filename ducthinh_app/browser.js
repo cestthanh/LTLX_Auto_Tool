@@ -274,45 +274,71 @@ class DucthinhBrowser {
         if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
         
         console.log(`[*] Đang tìm và nhấp vào khóa học: "${keyword}"...`);
-        await this.page.waitForSelector('a, tr, td', { timeout: 20000 });
+        await this.page.waitForSelector('table, tr, a, td', { timeout: 20000 });
 
-        const clicked = await this.safeEvaluate((kw) => {
-            // 1. Mở rộng tất cả các nhóm môn học con (Ví dụ: nhóm "Pháp luật giao thông đường bộ (3)")
-            const expandIcons = Array.from(document.querySelectorAll('.ant-table-row-expand-icon-collapsed, [class*="expand-icon-collapsed"], .ant-table-row-expand-icon'));
+        // 1. Mở rộng tất cả các nhóm môn học con và đợi DOM render xong
+        await this.safeEvaluate(() => {
+            const expandIcons = Array.from(document.querySelectorAll('.ant-table-row-expand-icon-collapsed, [class*="expand-icon-collapsed"], button.ant-table-row-expand-icon, .ant-table-row-expand-icon'));
             for (const icon of expandIcons) {
-                if (icon.classList.contains('ant-table-row-expand-icon-collapsed') || icon.classList.contains('ant-table-row-collapsed')) {
+                if (!icon.classList.contains('ant-table-row-expand-icon-expanded')) {
                     try { icon.click(); } catch (e) {}
                 }
             }
+        });
+        await new Promise(r => setTimeout(r, 1200));
 
-            // 2. Tìm link hoặc row khớp từ khóa
-            const links = Array.from(document.querySelectorAll('a, tr'));
-            for (const a of links) {
-                const txt = a.innerText ? a.innerText.toLowerCase() : "";
-                if (txt.includes(kw.toLowerCase())) {
-                    const linkTarget = a.querySelector ? a.querySelector('a') : (a.tagName === 'A' ? a : null);
-                    if (linkTarget) {
-                        linkTarget.click();
-                        return { success: true, text: linkTarget.innerText.trim(), href: linkTarget.href };
+        // 2. Tìm link hoặc hàng khớp từ khóa môn học
+        const clicked = await this.safeEvaluate((kw) => {
+            // Danh sách từ khóa phụ
+            const kwLower = kw.toLowerCase();
+            const aliases = [kwLower];
+            if (kwLower.includes("phần 1")) aliases.push("luật trật tự");
+            if (kwLower.includes("phần 2")) aliases.push("báo hiệu");
+            if (kwLower.includes("phần 3")) aliases.push("xử lý các tình huống");
+            if (kwLower.includes("đạo đức")) aliases.push("văn hóa");
+            if (kwLower.includes("kỹ thuật")) aliases.push("lái xe ô tô");
+            if (kwLower.includes("cấu tạo")) aliases.push("sửa chữa");
+            if (kwLower.includes("mô phỏng")) aliases.push("tình huống");
+
+            const allElements = Array.from(document.querySelectorAll('a, tr'));
+            for (const el of allElements) {
+                const txt = el.innerText ? el.innerText.toLowerCase() : "";
+                const isMatch = aliases.some(alias => txt.includes(alias));
+
+                if (isMatch) {
+                    const link = el.tagName === 'A' ? el : el.querySelector('a');
+                    if (link) {
+                        link.click();
+                        return { success: true, text: link.innerText.trim(), href: link.href };
                     }
-                    a.click();
-                    return { success: true, text: a.innerText.trim(), href: a.href || null };
+                    el.click();
+                    return { success: true, text: el.innerText.trim(), href: el.href || null };
                 }
             }
             return { success: false };
         }, keyword);
 
         if (!clicked || !clicked.success) {
-            console.log(`[!] Không tìm thấy link chứa từ khóa: "${keyword}", thử mở môn học đầu tiên...`);
-            await this.safeEvaluate(() => {
-                const firstLink = document.querySelector('tr a, .course-item a');
-                if (firstLink) firstLink.click();
-            });
+            console.log(`[!] Không tìm thấy khóa học khớp "${keyword}", tìm thử thẻ a chứa text...`);
+            const fallbackClicked = await this.safeEvaluate((kw) => {
+                const links = Array.from(document.querySelectorAll('a'));
+                for (const a of links) {
+                    if (a.innerText && a.innerText.toLowerCase().includes(kw.toLowerCase())) {
+                        a.click();
+                        return { success: true, text: a.innerText.trim() };
+                    }
+                }
+                return { success: false };
+            }, keyword);
+
+            if (!fallbackClicked || !fallbackClicked.success) {
+                throw new Error(`Không tìm thấy môn học: "${keyword}" trên bảng danh sách lớp học.`);
+            }
         } else {
             console.log(`[✓] Đã nhấp vào môn học: "${clicked.text}"`);
         }
 
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 3500));
         console.log(`[*] URL trang môn học: ${this.page.url()}`);
         return this.page.url();
     }
@@ -324,32 +350,57 @@ class DucthinhBrowser {
         if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
 
         console.log(`[*] Đang tìm và nhấp vào mục: "${taskKeyword}"...`);
-        await this.page.waitForSelector('table, tr, a, button', { timeout: 20000 });
+        await this.page.waitForSelector('table, tr, a, button, .ant-table-row', { timeout: 20000 });
 
         const clicked = await this.safeEvaluate((kw) => {
-            const rows = Array.from(document.querySelectorAll('tr'));
+            const kwLower = kw.toLowerCase();
+            const searchKeywords = [kwLower];
+            if (kwLower.includes("ôn luyện") || kwLower.includes("luyện")) {
+                searchKeywords.push("luyện tập", "luyện tất cả", "luyện thi", "trắc nghiệm", "làm bài", "bắt đầu");
+            }
+            if (kwLower.includes("bài giảng") || kwLower.includes("video")) {
+                searchKeywords.push("bài giảng điện tử", "học bài", "bài học", "video", "lý thuyết");
+            }
+
+            // 1. Tìm trong các hàng bảng (Table rows)
+            const rows = Array.from(document.querySelectorAll('tr, .ant-table-row, .block__item, .task-item'));
             for (const row of rows) {
-                if (row.innerText && row.innerText.toLowerCase().includes(kw.toLowerCase())) {
+                const txt = row.innerText ? row.innerText.toLowerCase() : "";
+                const matched = searchKeywords.some(k => txt.includes(k));
+                if (matched) {
                     const link = row.querySelector('a');
                     if (link) {
                         link.click();
                         return { success: true, text: link.innerText.trim(), href: link.href };
                     }
-                    const btn = row.querySelector('button, div[role="button"]');
+                    const btn = row.querySelector('button, .ant-btn, div[role="button"]');
                     if (btn) {
                         btn.click();
                         return { success: true, text: btn.innerText.trim(), href: null };
                     }
+                    row.click();
+                    return { success: true, text: row.innerText.trim(), href: null };
                 }
             }
 
-            const links = Array.from(document.querySelectorAll('a, button'));
-            for (const l of links) {
-                if (l.innerText && l.innerText.toLowerCase().includes(kw.toLowerCase())) {
-                    l.click();
-                    return { success: true, text: l.innerText.trim() };
+            // 2. Tìm trong tất cả các thẻ a hoặc button trên trang
+            const allClickables = Array.from(document.querySelectorAll('a, button, .ant-btn'));
+            for (const el of allClickables) {
+                const txt = el.innerText ? el.innerText.toLowerCase() : "";
+                const matched = searchKeywords.some(k => txt.includes(k));
+                if (matched) {
+                    el.click();
+                    return { success: true, text: el.innerText.trim(), href: el.href || null };
                 }
             }
+
+            // 3. Nếu chỉ có duy nhất 1 nhiệm vụ trong bảng, bấm thẳng vào nhiệm vụ đó
+            const singleTaskLink = document.querySelector('.ant-table-tbody tr a, table tbody tr a');
+            if (singleTaskLink) {
+                singleTaskLink.click();
+                return { success: true, text: singleTaskLink.innerText.trim(), href: singleTaskLink.href };
+            }
+
             return { success: false };
         }, taskKeyword);
 
@@ -357,7 +408,7 @@ class DucthinhBrowser {
             throw new Error(`Không tìm thấy mục: "${taskKeyword}" trên bảng chi tiết môn học.`);
         }
 
-        console.log(`[✓] Đã nhấp vào mục: "${taskKeyword}"`);
+        console.log(`[✓] Đã nhấp vào mục: "${clicked.text || taskKeyword}"`);
         await new Promise(r => setTimeout(r, 4000));
 
         await this.handleModals();
