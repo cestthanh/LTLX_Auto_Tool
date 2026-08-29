@@ -18,20 +18,21 @@ class WorkerManager {
             username: options.username || "",
             password: options.password || "123",
             mode: options.mode || "video", // "video" hoặc "practice"
-            course: options.course || "all_incomplete", // "all_incomplete", "Kỹ thuật lái xe", "Đạo đức", "Cấu tạo", "Phần 1", "Phần 2", "Phần 3", "Mô phỏng"
-            practiceCourse: options.practiceCourse || "Phần 2",
+            course: options.course || "all_incomplete",
+            practiceCourse: options.practiceCourse || "Phần 1",
             practiceCount: parseInt(options.practiceCount || 20, 10),
             headless: options.headless !== undefined ? options.headless : false,
-            status: "IDLE", // IDLE, STARTING, RUNNING, PAUSED_CAPTCHA, ERROR, COMPLETED
-            statusMessage: "Sẵn sàng khởi chạy",
-            alert: null, // { type: "CAPTCHA" | "LOCK" | "ERROR", message: "...", time: "..." }
+            step: "SETUP", // SETUP -> SCANNED -> RUNNING -> COMPLETED
+            status: "IDLE", // IDLE, SCANNING, STARTING, RUNNING, PAUSED_CAPTCHA, ERROR, COMPLETED
+            statusMessage: "Vui lòng nhập tài khoản và bấm [🔍 Quét tiến độ]",
+            alert: null,
             progress: {
                 current: 0,
                 total: 0,
                 percent: 0,
                 detail: "Chưa bắt đầu"
             },
-            courseOverview: [], // Bảng tiến độ tất cả các môn học [ { name, progress, hours, status } ]
+            courseOverview: [], // [ { name, progress, hours, status } ]
             logs: [],
             lastScreenshot: null,
             browserInstance: null,
@@ -157,7 +158,66 @@ class WorkerManager {
     }
 
     /**
-     * Bắt đầu chạy một tài khoản
+     * BƯỚC 1: QUÉT TIẾN ĐỘ TOÀN BỘ CÁC MÔN HỌC
+     */
+    async scanWorkerProgress(id) {
+        const worker = this.workers.get(id);
+        if (!worker || worker.isRunning) return;
+
+        if (!worker.username || !worker.username.trim()) {
+            this.addLog(id, "Vui lòng nhập số CCCD / Tài khoản học viên!", "error");
+            return;
+        }
+
+        worker.status = "SCANNING";
+        worker.statusMessage = "Đang kết nối để quét tiến độ các môn học...";
+        worker.alert = null;
+        this.notifyState();
+
+        this.addLog(id, `🔍 Bắt đầu quét tiến độ cho tài khoản: ${worker.username}...`);
+
+        let app = null;
+        try {
+            app = new DucthinhBrowser({
+                account: {
+                    username: worker.username.trim(),
+                    password: worker.password.trim()
+                },
+                browser: {
+                    headless: "new" // Luôn quét ngầm nhanh chóng
+                }
+            });
+
+            await app.login(worker.username, worker.password);
+            this.addLog(id, "Đăng nhập thành công! Đang lấy bảng tiến độ 6 môn học...", "info");
+
+            const overview = await app.getCourseProgressOverview();
+            worker.courseOverview = overview;
+            worker.step = "SCANNED";
+            worker.status = "IDLE";
+            worker.statusMessage = `Đã quét xong: Tìm thấy ${overview.length} môn học!`;
+
+            this.addLog(id, `[✓] Quét hoàn tất! Đã cập nhật trạng thái chi tiết của tất cả các môn.`, "success");
+            await app.close();
+
+        } catch (err) {
+            console.error(`[Worker ${id} Scan Error]:`, err);
+            worker.status = "ERROR";
+            worker.statusMessage = `Lỗi quét tiến độ: ${err.message}`;
+            this.setAlert(id, {
+                type: "ERROR",
+                message: `Quét thất bại: ${err.message}`,
+                time: new Date().toLocaleTimeString("vi-VN")
+            });
+            this.addLog(id, `❌ Lỗi quét: ${err.message}`, "error");
+            if (app) try { await app.close(); } catch(e) {}
+        } finally {
+            this.notifyState();
+        }
+    }
+
+    /**
+     * BƯỚC 2: BẮT ĐẦU CHẠY HỌC / ÔN LUYỆN
      */
     async startWorker(id) {
         const worker = this.workers.get(id);
@@ -170,12 +230,13 @@ class WorkerManager {
 
         worker.isRunning = true;
         worker.status = "STARTING";
+        worker.step = "RUNNING";
         worker.statusMessage = "Đang khởi chạy trình duyệt...";
         worker.alert = null;
         worker.progress = { current: 0, total: 0, percent: 0, detail: "Đang kết nối..." };
         this.notifyState();
 
-        this.addLog(id, `Bắt đầu phiên làm việc [Tài khoản: ${worker.username} | Chế độ: ${worker.mode.toUpperCase()}]`);
+        this.addLog(id, `🚀 Bắt đầu phiên làm việc [Tài khoản: ${worker.username} | Chế độ: ${worker.mode.toUpperCase()}]`);
 
         (async () => {
             let app = null;
@@ -218,19 +279,17 @@ class WorkerManager {
                     }
                 };
 
-                // BƯỚC 1: ĐĂNG NHẬP
+                // ĐĂNG NHẬP
                 this.addLog(id, "Đang đăng nhập vào hệ thống ducthinh.huelms.com...");
                 await app.login(worker.username, worker.password);
                 this.addLog(id, "Đăng nhập thành công!", "success");
                 await this.captureLivePreview(id);
 
-                // LẤY BẢNG TIẾN ĐỘ TỔNG QUAN TẤT CẢ CÁC MÔN HỌC
+                // Cập nhật lại bảng tiến độ mới nhất
                 const overview = await app.getCourseProgressOverview();
-                worker.courseOverview = overview;
-                this.notifyState();
-
                 if (overview.length > 0) {
-                    this.addLog(id, `Đã nạp bảng tiến độ ${overview.length} môn học từ hệ thống!`, "info");
+                    worker.courseOverview = overview;
+                    this.notifyState();
                 }
 
                 worker.status = "RUNNING";
@@ -241,7 +300,6 @@ class WorkerManager {
                     let coursesToLearn = [];
 
                     if (worker.course === "all_incomplete" || !worker.course) {
-                        // Tự động tìm các môn chưa đạt hoặc chưa đủ giờ
                         coursesToLearn = [
                             "Kỹ thuật lái xe",
                             "Cấu tạo",
@@ -250,7 +308,7 @@ class WorkerManager {
                             "Phần 3",
                             "Đạo đức"
                         ];
-                        this.addLog(id, "Chế độ [Tự động học tất cả môn]: Sẽ lần lượt quét và học toàn bộ các môn học!", "info");
+                        this.addLog(id, "Chế độ [Tự động học tất cả môn]: Sẽ lần lượt quét và học toàn bộ các môn!", "info");
                     } else {
                         coursesToLearn = [worker.course];
                     }
@@ -270,11 +328,9 @@ class WorkerManager {
                             await app.openTask("Bài giảng điện tử");
                             await this.captureLivePreview(id);
 
-                            // Tự động tìm bài chưa hoàn thành và học tiếp
                             this.addLog(id, "Quét danh mục và tự động học các bài/video CHƯA HOÀN THÀNH...");
                             await app.jumpToFirstUncompletedLesson();
 
-                            // Vòng lặp học bài trong môn
                             for (let lessonIdx = 1; lessonIdx <= 60; lessonIdx++) {
                                 if (!worker.isRunning) break;
 
@@ -351,13 +407,13 @@ class WorkerManager {
                                 }
                             }
                         } catch (courseErr) {
-                            this.addLog(id, `Lưu ý môn ${targetCourse}: ${courseErr.message} (Chuyển tiếp môn tiếp theo nếu có)`, "warning");
+                            this.addLog(id, `Lưu ý môn ${targetCourse}: ${courseErr.message}`, "warning");
                         }
                     }
 
                 } else {
                     // === CHẾ ĐỘ 2: ÔN LUYỆN TRẮC NGHIỆM ===
-                    const practiceCourse = worker.practiceCourse || "Phần 2";
+                    const practiceCourse = worker.practiceCourse || "Phần 1";
                     const count = worker.practiceCount || 20;
 
                     this.addLog(id, `Mở khóa học: "${practiceCourse}" để ôn luyện...`);
@@ -523,6 +579,7 @@ class WorkerManager {
                 practiceCourse: w.practiceCourse,
                 practiceCount: w.practiceCount,
                 headless: w.headless,
+                step: w.step || "SETUP",
                 status: w.status,
                 statusMessage: w.statusMessage,
                 alert: w.alert,

@@ -97,6 +97,9 @@ wss.on("connection", (ws) => {
                 case "delete":
                     await manager.deleteWorker(id);
                     break;
+                case "scan":
+                    manager.scanWorkerProgress(id);
+                    break;
                 case "start":
                     manager.startWorker(id);
                     break;

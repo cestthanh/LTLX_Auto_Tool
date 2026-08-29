@@ -606,6 +606,51 @@ body.dark-theme {
     gap: 8px;
 }
 
+/* CẤU TRÚC 2 BƯỚC THAO TÁC */
+.step-container {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: var(--transition);
+}
+
+.step-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.step-badge {
+    background: var(--primary);
+    color: #000;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.btn-scan-action {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+}
+
+.step-locked {
+    opacity: 0.45;
+    filter: grayscale(0.5);
+    pointer-events: none;
+}
+
 /* BẢNG TIẾN ĐỘ TỔNG QUAN CÁC MÔN HỌC */
 .course-overview-box {
     background: rgba(0, 0, 0, 0.35);
@@ -614,7 +659,30 @@ body.dark-theme {
     padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
+}
+
+.overview-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-rescan {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--primary);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-rescan:hover {
+    background: rgba(6, 182, 212, 0.15);
+    border-color: var(--primary);
 }
 
 .overview-title {

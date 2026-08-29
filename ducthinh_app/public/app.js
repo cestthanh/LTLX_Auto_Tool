@@ -1,10 +1,9 @@
-// LTLX AUTO TOOL - FRONTEND DASHBOARD APPLICATION
+// LTLX AUTO TOOL - FRONTEND DASHBOARD APPLICATION (2-STEP WORKFLOW)
 let socket = null;
 let workersData = [];
 let audioCtx = null;
 let lastAlertTimes = {};
 
-// Kiểm tra xem trang có đang mở ở chế độ Popout (Tách cửa sổ con) không
 const urlParams = new URLSearchParams(window.location.search);
 const popoutId = urlParams.get('id');
 
@@ -12,7 +11,7 @@ if (popoutId) {
     document.body.classList.add('popout-mode');
 }
 
-// Khởi tạo âm thanh cảnh báo bằng Web Audio API
+// Web Audio API Beep
 function playAlertBeep() {
     try {
         if (!audioCtx) {
@@ -42,7 +41,7 @@ function playAlertBeep() {
     } catch (e) {}
 }
 
-// KẾT NỐI WEBSOCKET
+// WEBSOCKET
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}`;
@@ -75,7 +74,6 @@ function connectWebSocket() {
     };
 }
 
-// XỬ LÝ SỰ KIỆN TỪ SERVER
 function handleServerEvent(data) {
     if (data.event === 'init' || data.event === 'state_update') {
         workersData = data.workers || [];
@@ -166,32 +164,41 @@ function renderAllCards() {
 
 function updateCardContent(card, worker, displayIndex) {
     const isRunning = worker.isRunning || worker.status === 'RUNNING' || worker.status === 'STARTING';
+    const isScanning = worker.status === 'SCANNING';
     const isAlert = worker.status === 'PAUSED_CAPTCHA' || worker.status === 'ERROR';
     const isCompleted = worker.status === 'COMPLETED';
+    const hasOverview = worker.courseOverview && worker.courseOverview.length > 0;
 
-    card.className = `account-card ${isRunning ? 'is-running' : ''} ${isAlert ? 'is-alert' : ''} ${isCompleted ? 'is-completed' : ''}`;
+    card.className = `account-card ${isRunning ? 'is-running' : ''} ${isScanning ? 'is-scanning' : ''} ${isAlert ? 'is-alert' : ''} ${isCompleted ? 'is-completed' : ''}`;
 
     let statusBadge = '';
     if (worker.status === 'RUNNING') {
-        statusBadge = '<span class="status-badge text-success">🟢 Đang chạy</span>';
+        statusBadge = '<span class="status-badge text-success">🟢 Đang học</span>';
     } else if (worker.status === 'STARTING') {
         statusBadge = '<span class="status-badge text-primary">⏳ Đang khởi động...</span>';
+    } else if (worker.status === 'SCANNING') {
+        statusBadge = '<span class="status-badge text-primary" style="animation: pulse 1s infinite;">🔍 Đang quét 6 môn...</span>';
     } else if (worker.status === 'PAUSED_CAPTCHA') {
         statusBadge = '<span class="status-badge text-warning" style="animation: alertPulse 1s infinite;">🔔 CẦN XÁC NHẬN CAPTCHA</span>';
     } else if (worker.status === 'ERROR') {
         statusBadge = '<span class="status-badge text-danger">❌ Bị lỗi / Chặn</span>';
     } else if (worker.status === 'COMPLETED') {
         statusBadge = '<span class="status-badge text-primary">🎉 Đã hoàn thành</span>';
+    } else if (hasOverview) {
+        statusBadge = '<span class="status-badge text-success">✓ Đã quét tiến độ</span>';
     } else {
-        statusBadge = '<span class="status-badge" style="color: var(--text-dim);">⚪ Sẵn sàng</span>';
+        statusBadge = '<span class="status-badge" style="color: var(--text-dim);">⚪ Chờ quét tiến độ</span>';
     }
 
-    // Bảng tiến độ các môn học (nếu đã nạp từ server)
+    // Bảng tiến độ các môn học
     let overviewHtml = '';
-    if (worker.courseOverview && worker.courseOverview.length > 0) {
+    if (hasOverview) {
         overviewHtml = `
             <div class="course-overview-box">
-                <div class="overview-title">📚 Tiến độ các môn học trên hệ thống:</div>
+                <div class="overview-header-row">
+                    <span class="overview-title">📊 Kết Quả Quét Tiến Độ 6 Môn Học:</span>
+                    <button class="btn-rescan" onclick="scanAccount('${worker.id}')" ${isRunning || isScanning ? 'disabled' : ''} title="Quét lại tiến độ mới nhất">🔄 Quét lại</button>
+                </div>
                 <div class="overview-grid">
                     ${worker.courseOverview.map(c => `
                         <div class="overview-row ${c.status === 'Đạt' ? 'status-pass' : 'status-fail'}">
@@ -215,7 +222,7 @@ function updateCardContent(card, worker, displayIndex) {
             </div>
             <div class="card-actions">
                 ${!popoutId ? `<button class="btn-popout" title="Tách ra cửa sổ riêng để chia 4 góc màn hình" onclick="openPopout('${worker.id}')">↗ Tách ô</button>` : ''}
-                ${!isRunning ? `<button class="btn-delete-card" title="Xóa tài khoản này" onclick="deleteAccount('${worker.id}')">🗑</button>` : ''}
+                ${!isRunning && !isScanning ? `<button class="btn-delete-card" title="Xóa tài khoản này" onclick="deleteAccount('${worker.id}')">🗑</button>` : ''}
             </div>
         </div>
 
@@ -228,35 +235,57 @@ function updateCardContent(card, worker, displayIndex) {
             </div>
         ` : ''}
 
+        <!-- BƯỚC 1: NHẬP THÔNG TIN VÀ QUÉT TIẾN ĐỘ -->
+        <div class="step-container">
+            <div class="step-title">
+                <span class="step-badge">BƯỚC 1</span>
+                <span>Nhập thông tin tài khoản & Chế độ:</span>
+            </div>
+            <div class="card-form-grid">
+                <div class="form-group">
+                    <label>Số CCCD / Tên Đăng Nhập:</label>
+                    <input type="text" class="form-control" value="${worker.username}" ${isRunning || isScanning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'username', this.value)" placeholder="Ví dụ: 035099002016">
+                </div>
+                <div class="form-group">
+                    <label>Mật Khẩu:</label>
+                    <input type="password" class="form-control" value="${worker.password}" ${isRunning || isScanning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'password', this.value)">
+                </div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label>Chế độ học mong muốn:</label>
+                    <select class="form-control" ${isRunning || isScanning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'mode', this.value)">
+                        <option value="video" ${worker.mode === 'video' ? 'selected' : ''}>🎬 Tự động Học Video & Lý Thuyết (Tích lũy giờ)</option>
+                        <option value="practice" ${worker.mode === 'practice' ? 'selected' : ''}>📝 Tự động Ôn Luyện Trắc Nghiệm</option>
+                    </select>
+                </div>
+            </div>
+
+            ${!hasOverview && !isRunning ? `
+                <button class="btn btn-primary btn-glow btn-scan-action" onclick="scanAccount('${worker.id}')" ${isScanning ? 'disabled' : ''}>
+                    ${isScanning ? '⏳ ĐANG QUÉT TIẾN ĐỘ 6 MÔN HỌC...' : '🔍 QUÉT TIẾN ĐỘ KHÓA HỌC (KIỂM TRA 6 MÔN)'}
+                </button>
+            ` : ''}
+        </div>
+
         ${overviewHtml}
 
-        <div class="card-form-grid">
-            <div class="form-group">
-                <label>Số CCCD / Tên Đăng Nhập:</label>
-                <input type="text" class="form-control" value="${worker.username}" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'username', this.value)" placeholder="Ví dụ: 035099002016">
+        <!-- BƯỚC 2: CHỌN MÔN & BẮT ĐẦU HỌC (HIỆN RÕ SAU KHI QUÉT HOẶC KHI ĐANG CHẠY) -->
+        <div class="step-container ${!hasOverview && !isRunning ? 'step-locked' : ''}">
+            <div class="step-title">
+                <span class="step-badge">BƯỚC 2</span>
+                <span>Chọn mục tiêu và Bắt đầu học:</span>
             </div>
-            <div class="form-group">
-                <label>Mật Khẩu:</label>
-                <input type="password" class="form-control" value="${worker.password}" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'password', this.value)">
-            </div>
-            <div class="form-group">
-                <label>Chế độ học:</label>
-                <select class="form-control" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'mode', this.value)">
-                    <option value="video" ${worker.mode === 'video' ? 'selected' : ''}>🎬 Học Video & Lý Thuyết (Tích lũy giờ)</option>
-                    <option value="practice" ${worker.mode === 'practice' ? 'selected' : ''}>📝 Ôn Luyện Trắc Nghiệm</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>${worker.mode === 'video' ? 'Môn học mục tiêu:' : 'Phần ôn luyện & Số câu:'}</label>
+
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label>${worker.mode === 'video' ? 'Chọn Môn Học Cần Cày Giờ:' : 'Chọn Phần Ôn Luyện & Số Câu:'}</label>
                 ${worker.mode === 'video' ? `
                     <select class="form-control" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'course', this.value)">
-                        <option value="all_incomplete" ${worker.course === 'all_incomplete' ? 'selected' : ''}>🚀 Tự động học TẤT CẢ các môn chưa đạt</option>
+                        <option value="all_incomplete" ${worker.course === 'all_incomplete' ? 'selected' : ''}>🚀 Tự động cày TẤT CẢ các môn chưa đạt (Khuyên dùng)</option>
                         <option value="Kỹ thuật lái xe" ${worker.course === 'Kỹ thuật lái xe' ? 'selected' : ''}>Kỹ thuật lái xe ô tô (20h)</option>
-                        <option value="Đạo đức" ${worker.course === 'Đạo đức' ? 'selected' : ''}>Đạo đức & Văn hóa GT & PCCC (14h)</option>
+                        <option value="Đạo đức" ${worker.course === 'Đạo đức' ? 'selected' : ''}>Đạo đức, Văn hóa GT & PCCC (14h)</option>
                         <option value="Cấu tạo" ${worker.course === 'Cấu tạo' ? 'selected' : ''}>Cấu tạo sửa chữa (8h)</option>
                         <option value="Phần 1" ${worker.course === 'Phần 1' ? 'selected' : ''}>Phần 1. Luật Trật tự ATGT (25h)</option>
-                        <option value="Phần 2" ${worker.course === 'Phần 2' ? 'selected' : ''}>Phần 2. Hệ thống báo hiệu (40h)</option>
-                        <option value="Phần 3" ${worker.course === 'Phần 3' ? 'selected' : ''}>Phần 3. Xử lý tình huống (25h)</option>
+                        <option value="Phần 2" ${worker.course === 'Phần 2' ? 'selected' : ''}>Phần 2. Hệ thống báo hiệu đường bộ (40h)</option>
+                        <option value="Phần 3" ${worker.course === 'Phần 3' ? 'selected' : ''}>Phần 3. Xử lý tình huống giao thông (25h)</option>
                         <option value="Mô phỏng" ${worker.course === 'Mô phỏng' ? 'selected' : ''}>Mô phỏng các tình huống GT</option>
                     </select>
                 ` : `
@@ -280,22 +309,22 @@ function updateCardContent(card, worker, displayIndex) {
                     </div>
                 `}
             </div>
-        </div>
 
-        <div class="card-controls-row">
-            <label class="toggle-headless">
-                <input type="checkbox" ${worker.headless ? 'checked' : ''} ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'headless', this.checked)">
-                <span>Ẩn trình duyệt (Headless)</span>
-            </label>
-            ${!isRunning ? `
-                <button class="btn btn-success btn-card-action" onclick="startAccount('${worker.id}')">
-                    <span>▶</span> BẮT ĐẦU
-                </button>
-            ` : `
-                <button class="btn btn-danger btn-card-action" onclick="stopAccount('${worker.id}')">
-                    <span>⏹</span> DỪNG LẠI
-                </button>
-            `}
+            <div class="card-controls-row">
+                <label class="toggle-headless">
+                    <input type="checkbox" ${worker.headless ? 'checked' : ''} ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'headless', this.checked)">
+                    <span>Ẩn trình duyệt (Headless)</span>
+                </label>
+                ${!isRunning ? `
+                    <button class="btn btn-success btn-card-action" onclick="startAccount('${worker.id}')" ${isScanning ? 'disabled' : ''}>
+                        <span>▶</span> BẮT ĐẦU HỌC
+                    </button>
+                ` : `
+                    <button class="btn btn-danger btn-card-action" onclick="stopAccount('${worker.id}')">
+                        <span>⏹</span> DỪNG LẠI
+                    </button>
+                `}
+            </div>
         </div>
 
         <!-- THANH TIẾN ĐỘ THỜI GIAN THỰC -->
@@ -352,6 +381,10 @@ function updateAccountField(id, field, value) {
     sendAction('update', id, { [field]: value });
 }
 
+function scanAccount(id) {
+    sendAction('scan', id);
+}
+
 function startAccount(id) {
     sendAction('start', id);
 }
@@ -367,8 +400,8 @@ function deleteAccount(id) {
 }
 
 function openPopout(id) {
-    const width = 600;
-    const height = 780;
+    const width = 620;
+    const height = 820;
     const left = (screen.width - width) / 2;
     const top = (screen.height - height) / 2;
     window.open(`/index.html?id=${id}`, `Popout_${id}`, `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`);
