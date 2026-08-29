@@ -430,74 +430,32 @@ class WorkerManager {
 
                     this.addLog(id, `Bắt đầu tự động giải ${count} câu hỏi trắc nghiệm trong ${practiceCourse}...`);
 
-                    for (let q = 1; q <= count; q++) {
-                        if (!worker.isRunning) break;
-
-                        await app.handleHumanVerificationIfNeeded();
-
-                        const qInfo = await app.safeEvaluate(() => {
-                            const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
-                            const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
-                            const title = document.querySelector('.question-content, .question-title, h4, h3, .content')?.innerText?.trim() || "";
-                            let qId = inputs.length > 0 && inputs[0].id ? inputs[0].id.split('-')[0] : null;
-                            return { qId, title: title.slice(0, 70), optionsCount: labels.length || inputs.length };
-                        });
-
-                        if (!qInfo || (!qInfo.qId && qInfo.optionsCount === 0)) {
-                            await app.handleModals();
-                            continue;
+                    await app.solveAllQuestions({
+                        maxQuestions: count,
+                        minDelayPerQuestion: 3,
+                        maxDelayPerQuestion: 6,
+                        isRunningCheck: () => worker.isRunning,
+                        onLog: (msg, type) => {
+                            this.addLog(id, msg, type || "info");
+                        },
+                        onProgress: (prog) => {
+                            this.updateProgress(id, {
+                                current: prog.current,
+                                total: prog.total,
+                                percent: prog.percent,
+                                detail: prog.detail,
+                                statusMessage: `[${practiceCourse}] ${prog.statusMessage}`
+                            });
+                            this.captureLivePreview(id);
                         }
-
-                        let targetIndex = 0;
-                        if (qInfo.qId && app.questionBank.has(qInfo.qId)) {
-                            const bankItem = app.questionBank.get(qInfo.qId);
-                            targetIndex = bankItem.correctIndices[0] || 0;
-                            const ansText = bankItem.mc_answers?.[targetIndex]?.text || `Đáp án ${targetIndex + 1}`;
-                            this.addLog(id, `[Câu ${q}/${count}] Đáp án đúng: "${ansText}"`);
-                        } else {
-                            this.addLog(id, `[Câu ${q}/${count}] Chọn đáp án 1`);
-                        }
-
-                        const pct = Math.round((q / count) * 100);
-                        this.updateProgress(id, {
-                            current: q,
-                            total: count,
-                            percent: pct,
-                            detail: `Câu ${q}/${count} (${qInfo.title}...)`,
-                            statusMessage: `[${practiceCourse}] Đang làm câu ${q}/${count}`
-                        });
-
-                        await new Promise(r => setTimeout(r, 1000));
-                        try { await app.page.mouse.wheel({ deltaY: 30 }); } catch (e) {}
-
-                        let clicked = false;
-                        if (qInfo.qId) {
-                            clicked = await app.smoothMoveAndClick(`label[for="${qInfo.qId}-${targetIndex}"]`);
-                        }
-                        if (!clicked) {
-                            try {
-                                const labels = await app.page.$$('label, .ant-radio-wrapper');
-                                if (labels[targetIndex]) await app.smoothMoveAndClick(labels[targetIndex]);
-                            } catch (e) {}
-                        }
-
-                        await new Promise(r => setTimeout(r, 3000));
-                        await this.captureLivePreview(id);
-
-                        await app.safeEvaluate(() => {
-                            const btns = Array.from(document.querySelectorAll('button, .ant-btn, a'));
-                            for (const b of btns) {
-                                const txt = b.innerText.trim();
-                                if (txt === "Tiếp" || txt === "Tiếp theo") { b.click(); return; }
-                            }
-                        });
-                    }
+                    });
 
                     if (worker.isRunning) {
                         this.addLog(id, "Bấm kết thúc luyện thi và nộp bài...", "info");
+                        await new Promise(r => setTimeout(r, 2000));
                         await app.finishPractice();
                         await this.captureLivePreview(id);
-                        this.addLog(id, "🎉 Nộp bài hoàn tất!", "success");
+                        this.addLog(id, "🎉 Nộp bài hoàn tất thành công!", "success");
                     }
                 }
 

@@ -393,38 +393,45 @@ class DucthinhBrowser {
     }
 
     /**
-     * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với MÔ PHỎNG HÀNH VI & SMART RESUME
+     * Tự động giải toàn bộ câu hỏi trong đề ôn luyện với MÔ PHỎNG HÀNH VI (HUMAN SIMULATION) & CHỐNG PHÁT HIỆN
      */
     async solveAllQuestions(options = {}) {
         const minDelay = options.minDelayPerQuestion || this.config.practice.minDelayPerQuestion || 3;
-        const maxDelay = options.maxDelayPerQuestion || this.config.practice.maxDelayPerQuestion || 5;
+        const maxDelay = options.maxDelayPerQuestion || this.config.practice.maxDelayPerQuestion || 6;
         const maxQuestions = options.maxQuestions || this.config.practice.maxQuestions || 185;
+        const onProgress = options.onProgress || (() => {});
+        const onLog = options.onLog || console.log;
+        const isRunningCheck = options.isRunningCheck || (() => true);
 
-        console.log(`\n================================================================================`);
-        console.log(`    BẮT ĐẦU TỰ ĐỘNG GIẢI ${maxQuestions} CÂU HỎI (TỰ ĐỘNG TẠM DỪNG / TIẾP TỤC)     `);
-        console.log(`    Thời gian giữ mỗi câu tối đa: ${maxDelay}s (siêu tốc & tự nhiên)`);
-        console.log(`================================================================================\n`);
+        // 1. Luôn nạp ngân hàng câu hỏi trước khi giải
+        if (!this.questionBank || this.questionBank.size === 0) {
+            onLog("Đang nạp ngân hàng câu hỏi & đáp án chuẩn từ hệ thống...", "info");
+            await this.loadQuestionBank();
+            onLog(`Đã nạp thành công ${this.questionBank.size} câu hỏi chuẩn!`, "success");
+        }
 
         let completedCount = 0;
 
         for (let i = 1; i <= maxQuestions; i++) {
+            if (!isRunningCheck()) break;
+
             await new Promise(r => setTimeout(r, 600));
 
-            // 1. Kiểm tra và tạm dừng nếu có Captcha / Xác minh người thật
+            // Kiểm tra và tạm dừng nếu có Captcha / Xác minh người thật
             await this.handleHumanVerificationIfNeeded();
 
-            // 2. Kiểm tra nếu bài luyện thi đã kết thúc
+            // Kiểm tra nếu bài luyện thi đã kết thúc
             const isFinished = await this.safeEvaluate(() => {
                 const text = document.body.innerText;
                 return text.includes("Kết quả luyện tập") || text.includes("Hoàn thành bài luyện") || text.includes("Điểm số của bạn");
             });
 
             if (isFinished) {
-                console.log("\n[🎉] ĐÃ HOÀN THÀNH TOÀN BỘ BÀI LUYỆN TẬP!");
+                onLog("🎉 ĐÃ HOÀN THÀNH TOÀN BỘ BÀI LUYỆN TẬP!", "success");
                 break;
             }
 
-            // 3. Lấy thông tin câu hỏi và ID câu hỏi từ giao diện
+            // Lấy thông tin câu hỏi
             const qInfo = await this.safeEvaluate(() => {
                 const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
                 const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
@@ -449,34 +456,40 @@ class DucthinhBrowser {
 
             completedCount++;
 
-            // 4. Tìm đáp án đúng trong ngân hàng câu hỏi
+            // Tìm đáp án đúng từ ngân hàng câu hỏi
             let targetIndex = 0;
+            let ansText = "Phương án 1";
             if (qInfo.qId && this.questionBank.has(qInfo.qId)) {
                 const bankItem = this.questionBank.get(qInfo.qId);
                 targetIndex = bankItem.correctIndices[0] || 0;
-                const answerText = bankItem.mc_answers?.[targetIndex]?.text || `Phương án ${targetIndex + 1}`;
-                console.log(`[Câu ${completedCount}/${maxQuestions}] 🎯 Đáp án đúng: "${answerText}"\n    Câu hỏi: "${qInfo.title}..."`);
+                ansText = bankItem.mc_answers?.[targetIndex]?.text || `Phương án ${targetIndex + 1}`;
+                onLog(`[Câu ${completedCount}/${maxQuestions}] 🎯 Đáp án đúng: "${ansText}"`, "info");
             } else {
-                console.log(`[Câu ${completedCount}/${maxQuestions}] ℹ️ Câu hỏi: "${qInfo.title}..." (Chọn phương án 1)`);
+                onLog(`[Câu ${completedCount}/${maxQuestions}] ℹ️ Chọn phương án 1`, "info");
             }
 
-            // 5. Mô phỏng đọc đề nhanh (1s) + cuộn nhẹ trang
-            const readTime = Math.max(1, this.config.practice.readTimePerQuestion || 1);
-            process.stdout.write(`    📖 Đang đọc đề (${readTime}s) `);
-            for (let r = 0; r < readTime; r++) {
-                process.stdout.write(".");
-                await new Promise(res => setTimeout(res, 1000));
-            }
-            process.stdout.write("\n");
+            const pct = Math.round((completedCount / maxQuestions) * 100);
+            onProgress({
+                current: completedCount,
+                total: maxQuestions,
+                percent: pct,
+                detail: `Câu ${completedCount}/${maxQuestions} (${qInfo.title}...)`,
+                statusMessage: `Đang làm câu ${completedCount}/${maxQuestions}`
+            });
 
+            // 1. MÔ PHỎNG ĐỌC ĐỀ NGẪU NHIÊN (1.5s - 2.5s)
+            const readTime = 1.5 + Math.random() * 1.0;
+            await new Promise(res => setTimeout(res, Math.round(readTime * 1000)));
+
+            // 2. CUỘN NHẸ TRANG NHƯ NGƯỜI THẬT
             try {
-                await this.page.mouse.wheel({ deltaY: 30 + Math.floor(Math.random() * 30) });
-                await new Promise(r => setTimeout(r, 200));
+                await this.page.mouse.wheel({ deltaY: 25 + Math.floor(Math.random() * 30) });
+                await new Promise(r => setTimeout(r, 250));
             } catch (e) {}
 
             await this.handleHumanVerificationIfNeeded();
 
-            // 6. Di chuột thật và bấm chọn đáp án
+            // 3. DI CHUỘT THEO ĐƯỜNG CONG TỰ NHIÊN VÀ CLICK ĐÁP ÁN
             let clickSuccess = false;
             if (qInfo.qId) {
                 const targetSelector = `label[for="${qInfo.qId}-${targetIndex}"]`;
@@ -493,22 +506,19 @@ class DucthinhBrowser {
                 } catch (e) {}
             }
 
-            // 7. Tính toán thời gian giữ câu ngẫu nhiên (tổng thời gian 3s - 5s)
-            const remainingDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay - readTime;
-            const actualDelay = Math.max(1, remainingDelay);
-
-            process.stdout.write(`    ⏳ Giữ câu ${actualDelay}s: `);
+            // 4. GIỮ CÂU NGẪU NHIÊN TỰ NHIÊN (3s - 5.5s)
+            const actualDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
             for (let s = actualDelay; s > 0; s--) {
-                process.stdout.write(`${s}s `);
+                if (!isRunningCheck()) break;
                 await new Promise(res => setTimeout(res, 1000));
-                
                 if (s % 2 === 0) {
                     await this.handleHumanVerificationIfNeeded();
                 }
             }
-            process.stdout.write(` -> Chuyển câu!\n\n`);
 
-            // 8. Di chuyển chuột tới nút [Tiếp] và click
+            if (!isRunningCheck()) break;
+
+            // 5. CHUYỂN TIẾP SANG CÂU SAU BẰNG DI CHUỘT
             try {
                 const nextBtn = await this.page.evaluateHandle(() => {
                     const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
@@ -535,9 +545,7 @@ class DucthinhBrowser {
             } catch (e) {}
         }
 
-        console.log(`\n================================================================================`);
-        console.log(`[✓] ĐÃ HOÀN THÀNH TỰ ĐỘNG GIẢI ${completedCount} CÂU HỎI!`);
-        console.log(`================================================================================\n`);
+        return completedCount;
     }
 
     /**
