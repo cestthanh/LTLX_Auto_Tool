@@ -1,9 +1,20 @@
 {
-  "dependencies": {
-    "playwright": "^1.62.1",
-    "puppeteer": "^24.43.1",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-anonymize-ua": "^2.4.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
-  }
+  "name": "ltlx-auto-tool",
+  "version": "2.0.0",
+  "description": "Hệ thống tự động hóa học tập & ôn luyện thi GPLX trường Đức Thịnh (LotusLMS)",
+  "main": "gui.js",
+  "scripts": {
+    "start": "node gui.js",
+    "gui": "node gui.js",
+    "cli": "node ducthinh_app/index.js",
+    "video": "node ducthinh_app/index.js --video"
+  },
+  "keywords": [
+    "lotuslms",
+    "ltlx",
+    "auto-learning",
+    "puppeteer"
+  ],
+  "author": "",
+  "license": "ISC"
 }

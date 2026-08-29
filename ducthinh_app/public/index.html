@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LTLX Auto Tool - Dashboard Đa Tài Khoản</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+    <!-- NỀN HIỆU ỨNG GLOW -->
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div id="app" class="dashboard-wrapper">
+        <!-- HEADER THANH ĐIỀU KHIỂN CHÍNH -->
+        <header class="main-header" id="mainHeader">
+            <div class="header-left">
+                <div class="brand-logo">
+                    <span class="logo-icon">🚗</span>
+                    <div class="brand-text">
+                        <h1>LTLX AUTO TOOL <span class="badge-version">v2.5 PRO</span></h1>
+                        <p class="brand-sub">Hệ thống Tự động hóa Đào tạo Lái xe Đức Thịnh (ducthinh.huelms.com)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="global-controls">
+                    <button class="btn btn-primary btn-glow" id="btnAddAccount">
+                        <span class="btn-icon">➕</span> Thêm Tài Khoản Mới
+                    </button>
+                    <button class="btn btn-success" id="btnStartAll">
+                        <span class="btn-icon">▶</span> Bắt Đầu Tất Cả
+                    </button>
+                    <button class="btn btn-danger" id="btnStopAll">
+                        <span class="btn-icon">⏹</span> Dừng Tất Cả
+                    </button>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <div class="view-mode-toggle">
+                    <button class="btn-icon-toggle active" id="btnGridMode" title="Chế độ Lưới 4 Ô (2x2)">
+                        ⊞ 4 Ô Lưới
+                    </button>
+                    <button class="btn-icon-toggle" id="btnListMode" title="Chế độ Danh sách Cột">
+                        ☰ Danh sách
+                    </button>
+                </div>
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot online"></span>
+                    <span class="status-text">Đã kết nối</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- BANNER THỐNG KÊ TỔNG QUAN -->
+        <section class="stats-bar" id="statsBar">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-info">
+                    <span class="stat-label">Tổng Tài Khoản</span>
+                    <strong class="stat-value" id="statTotal">1</strong>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-info">
+                    <span class="stat-label">Đang Hoạt Động</span>
+                    <strong class="stat-value text-success" id="statRunning">0</strong>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔔</div>
+                <div class="stat-info">
+                    <span class="stat-label">Cần Chú Ý / Captcha</span>
+                    <strong class="stat-value text-warning" id="statAlert">0</strong>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎉</div>
+                <div class="stat-info">
+                    <span class="stat-label">Đã Hoàn Thành</span>
+                    <strong class="stat-value text-primary" id="statCompleted">0</strong>
+                </div>
+            </div>
+        </section>
+
+        <!-- KHU VỰC CHỨA CÁC THẺ TÀI KHOẢN (GRID 2x2 HOẶC LIST) -->
+        <main class="cards-container grid-layout" id="cardsContainer">
+            <!-- Render động bằng JavaScript -->
+        </main>
+    </div>
+
+    <!-- MODAL THÊM TÀI KHOẢN MỚI -->
+    <div class="modal-backdrop" id="modalAdd">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Thêm Tài Khoản Học Viên Mới</h3>
+                <button class="btn-close" id="btnCloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Số CCCD / Tên Đăng Nhập:</label>
+                    <input type="text" id="newUsername" placeholder="Ví dụ: 035099002016" class="form-control" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Mật Khẩu:</label>
+                    <input type="password" id="newPassword" value="123" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Chế độ học mặc định:</label>
+                    <select id="newMode" class="form-control">
+                        <option value="video">🎬 Tự động Học Video Bài Giảng</option>
+                        <option value="practice">📝 Tự động Ôn Luyện Trắc Nghiệm</option>
+                    </select>
+                </div>
+                <div class="form-group" id="groupCourse">
+                    <label>Môn học:</label>
+                    <select id="newCourse" class="form-control">
+                        <option value="Kỹ thuật lái xe">Kỹ thuật lái xe ô tô</option>
+                        <option value="Đạo đức">Đạo đức người lái xe & Văn hóa giao thông</option>
+                        <option value="Cấu tạo">Cấu tạo sửa chữa</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="newHeadless">
+                        <span>Chạy ẩn trình duyệt (Headless - tiết kiệm tài nguyên)</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCancelAdd">Hủy</button>
+                <button class="btn btn-primary btn-glow" id="btnSubmitAdd">Tạo Thẻ Tài Khoản</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

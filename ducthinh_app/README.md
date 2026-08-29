@@ -1,79 +1,47 @@
 # Hệ Thống Tự Động Hóa Học Tập - Trường Lái Xe Đức Thịnh (ducthinh.huelms.com)
 
-Hệ thống tự động hóa toàn diện quy trình học tập trực tuyến trên nền tảng LotusLMS dành cho học viên trường Đức Thịnh.
+Hệ thống tự động hóa toàn diện quy trình học tập trực tuyến trên nền tảng LotusLMS dành cho học viên trường Đức Thịnh, hỗ trợ cả **Giao diện Web Dashboard Trực quan** và **Dòng lệnh CLI**.
 
 ---
 
-## 🌟 Các Tính Năng Nổi Bật
+## 🌟 GIAO DIỆN WEB DASHBOARD ĐA TÀI KHOẢN (MỚI)
 
-1. **Vô hiệu hóa 100% bẫy DevTools & Anti-Cheat**: Tự động vô hiệu hóa `devtools-detector` và các cơ chế bẫy `client_sync_token`.
-2. **Cơ chế Always-Active & Anti-Blur**: Thoải mái chuyển tab, chuyển màn hình, thu nhỏ Chrome (minimize) hoặc tắt màn hình mà hệ thống không bao giờ báo vi phạm hay dừng phát.
-3. **Smart Captcha Auto-Resume**: Tự động phát chuông báo khi có Captcha/xác minh, tạm dừng và tự động làm tiếp ngay khi bạn xác nhận xong trên Chrome.
-4. **Mô phỏng hành vi tự nhiên (Human-like Simulation)**: Di chuyển chuột mượt mà (smooth mouse movement), thời gian giữ câu ngẫu nhiên, đọc đề trước khi chọn đáp án.
-5. **Tự động Nộp bài (Finish Practice)**: Tự động bấm *Kết thúc luyện thi* và xác nhận nộp bài sau khi giải xong.
-6. **Module Học Bài Giảng Điện Tử & Video**: Tự động phát toàn bộ slides âm thanh và video bài giảng, tự động tắt tiếng (mute) và chuyển bài liên tục.
+Giao diện Web Dashboard cục bộ giúp bạn dễ dàng quản lý và cày giờ cho nhiều học viên song song:
+
+### 🚀 Cách mở Giao diện:
+Chỉ cần chạy lệnh sau trong Terminal:
+```powershell
+npm run gui
+# hoặc
+node gui.js
+```
+Trình duyệt sẽ tự động mở trang Dashboard: **`http://localhost:3000`**
+
+### 🎯 Các Tính Năng Nổi Bật Trên Giao Diện:
+1. **Quản lý Đa Tài Khoản Song Song:** Thêm 1, 2, 4 hoặc nhiều học viên cùng lúc. Nhập CCCD, mật khẩu, chọn môn học hoặc số câu ôn luyện.
+2. **Chia 4 Ô Màn Hình (Lưới 2x2):** Bố cục dạng lưới 4 ô cân đối hoặc danh sách dọc.
+3. **Tách Cửa Sổ Riêng Biệt (Popout Window):** Nút **`[ ↗ Tách ô ]`** mở riêng từng tài khoản ra một cửa sổ popup độc lập, cho phép bạn dùng phím `Win + Phím mũi tên` để ghim vào 4 góc màn hình desktop.
+4. **Tùy chọn Ẩn / Hiện Chrome:** Mỗi tài khoản có thể bật/tắt chế độ `Headless` (Ẩn trình duyệt để tiết kiệm RAM và không lo chạm chuột).
+5. **Thanh Tiến Độ & Live Log Thời Gian Thực:** Hiển thị phần trăm `%`, thời lượng đếm ngược video `[02:15 / 10:46]` hoặc tiến độ giải trắc nghiệm.
+6. **Cảnh Báo Tức Thời (Âm Thanh & Nhấp Nháy Đỏ):** Tự động phát âm thanh cảnh báo khi phát hiện Captcha / Xác minh người thật / Khóa tài khoản, giúp bạn can thiệp kịp thời.
 
 ---
 
-## 🚀 Hướng Dẫn Sử Dụng
+## 💻 DÒNG LỆNH CLI (Nâng Cao)
 
-### 1. Chế độ 1: Tự động Ôn luyện Trắc nghiệm (Đề chuẩn 100%)
-
-* **Giải 20 câu hỏi:**
+* **Ôn luyện 20 câu trắc nghiệm:**
   ```powershell
   node ducthinh_app/index.js 20
   ```
-* **Giải 50 câu hỏi chạy ẩn hoàn toàn:**
-  ```powershell
-  node ducthinh_app/index.js 50 --headless
-  ```
-* **Giải với tài khoản khác:**
-  ```powershell
-  node ducthinh_app/index.js 25 001198003037 123
-  ```
-
----
-
-### 2. Chế độ 2: Tự động Học Bài Giảng Điện Tử & Video
-
-* **Tự động học môn mặc định ("Đạo đức người lái xe"):**
-  ```powershell
-  node ducthinh_app/index.js --video
-  ```
-* **Tự động học môn cụ thể (ví dụ: "Kỹ thuật lái xe ô tô"):**
+* **Tự động học Video bài giảng môn "Kỹ thuật lái xe":**
   ```powershell
   node ducthinh_app/index.js --video "Kỹ thuật lái xe"
   ```
-* **Tự động học môn cụ thể (ví dụ: "Cấu tạo sửa chữa"):**
+* **Tự động học Video bài giảng môn "Cấu tạo sửa chữa":**
   ```powershell
   node ducthinh_app/index.js --video "Cấu tạo"
   ```
-* **Tự động học video chạy ẩn hoàn toàn:**
+* **Chạy ẩn hoàn toàn:**
   ```powershell
   node ducthinh_app/index.js --video --headless
   ```
-
----
-
-## ⚙️ Cấu Hình Tùy Chỉnh
-
-Mọi thông tin tài khoản, thời gian giữ câu, tốc độ phát video có thể điều chỉnh tại file `ducthinh_app/config.js`:
-
-```javascript
-module.exports = {
-    account: {
-        username: "025098009525", // Tài khoản mặc định
-        password: "123"
-    },
-    practice: {
-        minDelayPerQuestion: 3,  // Giữ tối thiểu mỗi câu (giây)
-        maxDelayPerQuestion: 5,  // Giữ tối đa mỗi câu (giây)
-        maxQuestions: 185
-    },
-    video: {
-        playbackRate: 1.25,      // Tốc độ phát video (1.0x - 1.5x)
-        muteAudio: true,         // Tự động tắt tiếng
-        maxLessons: 50           // Số bài tối đa trong 1 phiên
-    }
-};
-```
