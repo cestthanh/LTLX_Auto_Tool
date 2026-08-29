@@ -237,7 +237,38 @@ class DucthinhBrowser {
     }
 
     /**
-     * Nhấp vào môn học theo tên (Ví dụ: "Phần 2. Hệ thống báo hiệu đường bộ" hoặc "Kỹ thuật lái xe")
+     * Lấy bảng tổng quan tiến độ của tất cả các môn học trên Dashboard
+     */
+    async getCourseProgressOverview() {
+        if (!this.page) return [];
+        return await this.safeEvaluate(() => {
+            // Mở rộng tất cả các nhóm môn học
+            const expandIcons = Array.from(document.querySelectorAll('.ant-table-row-expand-icon-collapsed, [class*="expand-icon-collapsed"]'));
+            for (const icon of expandIcons) {
+                try { icon.click(); } catch(e) {}
+            }
+
+            const rows = Array.from(document.querySelectorAll('tr.ant-table-row, tr'));
+            const list = [];
+            for (const r of rows) {
+                const text = r.innerText ? r.innerText.trim() : "";
+                if (!text || text.includes("Tên lớp học") || text.includes("Tiến độ")) continue;
+                
+                const cells = Array.from(r.querySelectorAll('td')).map(c => c.innerText.trim());
+                if (cells.length >= 3) {
+                    const name = cells[0].replace(/\n/g, ' ').replace(/-/g, '').trim();
+                    const progress = cells[1];
+                    const hours = cells[2];
+                    const status = cells[3] || (cells[1].includes("Đạt") ? "Đạt" : "Chưa đạt");
+                    list.push({ name, progress, hours, status });
+                }
+            }
+            return list;
+        }) || [];
+    }
+
+    /**
+     * Nhấp vào môn học theo tên (Ví dụ: "Phần 1", "Phần 2", "Phần 3", "Đạo đức", "Kỹ thuật", "Cấu tạo")
      */
     async openCourse(keyword = "Phần 2. Hệ thống báo hiệu đường bộ") {
         if (!this.page) throw new Error("Trình duyệt chưa được khởi chạy.");
@@ -246,11 +277,26 @@ class DucthinhBrowser {
         await this.page.waitForSelector('a, tr, td', { timeout: 20000 });
 
         const clicked = await this.safeEvaluate((kw) => {
-            const links = Array.from(document.querySelectorAll('a'));
+            // 1. Mở rộng tất cả các nhóm môn học con (Ví dụ: nhóm "Pháp luật giao thông đường bộ (3)")
+            const expandIcons = Array.from(document.querySelectorAll('.ant-table-row-expand-icon-collapsed, [class*="expand-icon-collapsed"], .ant-table-row-expand-icon'));
+            for (const icon of expandIcons) {
+                if (icon.classList.contains('ant-table-row-expand-icon-collapsed') || icon.classList.contains('ant-table-row-collapsed')) {
+                    try { icon.click(); } catch (e) {}
+                }
+            }
+
+            // 2. Tìm link hoặc row khớp từ khóa
+            const links = Array.from(document.querySelectorAll('a, tr'));
             for (const a of links) {
-                if (a.innerText && a.innerText.toLowerCase().includes(kw.toLowerCase())) {
+                const txt = a.innerText ? a.innerText.toLowerCase() : "";
+                if (txt.includes(kw.toLowerCase())) {
+                    const linkTarget = a.querySelector ? a.querySelector('a') : (a.tagName === 'A' ? a : null);
+                    if (linkTarget) {
+                        linkTarget.click();
+                        return { success: true, text: linkTarget.innerText.trim(), href: linkTarget.href };
+                    }
                     a.click();
-                    return { success: true, text: a.innerText.trim(), href: a.href };
+                    return { success: true, text: a.innerText.trim(), href: a.href || null };
                 }
             }
             return { success: false };

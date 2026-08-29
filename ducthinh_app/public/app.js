@@ -27,8 +27,8 @@ function playAlertBeep() {
         const gain = audioCtx.createGain();
 
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, now); // Nốt A5
-        osc.frequency.setValueAtTime(1174, now + 0.1); // Nốt D6
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.setValueAtTime(1174, now + 0.1);
         osc.frequency.setValueAtTime(880, now + 0.2);
 
         gain.gain.setValueAtTime(0.3, now);
@@ -48,7 +48,6 @@ function connectWebSocket() {
     const wsUrl = `${protocol}//${window.location.host}`;
     
     socket = new WebSocket(wsUrl);
-
     const statusEl = document.getElementById('connectionStatus');
 
     socket.onopen = () => {
@@ -93,14 +92,12 @@ function handleServerEvent(data) {
     }
 }
 
-// GỬI HÀNH ĐỘNG TỚI SERVER
 function sendAction(action, id = null, options = {}) {
     if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ action, id, options }));
     }
 }
 
-// CẬP NHẬT THỐNG KÊ TỔNG QUAN
 function updateStats() {
     const total = workersData.length;
     const running = workersData.filter(w => w.status === 'RUNNING' || w.status === 'STARTING').length;
@@ -118,7 +115,6 @@ function updateStats() {
     if (elCompleted) elCompleted.innerText = completed;
 }
 
-// KIỂM TRA PHÁT ÂM THANH BÁO ĐỘNG
 function checkAlerts() {
     workersData.forEach(w => {
         if (w.status === 'PAUSED_CAPTCHA' || (w.alert && w.alert.type === 'CAPTCHA')) {
@@ -131,12 +127,10 @@ function checkAlerts() {
     });
 }
 
-// RENDER TOÀN BỘ DANH SÁCH THẺ
 function renderAllCards() {
     const container = document.getElementById('cardsContainer');
     if (!container) return;
 
-    // Nếu ở chế độ Popout, chỉ hiển thị đúng thẻ được chọn
     const displayList = popoutId ? workersData.filter(w => w.id === popoutId) : workersData;
 
     if (displayList.length === 0) {
@@ -161,7 +155,6 @@ function renderAllCards() {
         updateCardContent(card, worker, index + 1);
     });
 
-    // Xóa các card không còn tồn tại
     const existingCards = container.querySelectorAll('.account-card');
     existingCards.forEach(c => {
         const id = c.id.replace('card_', '');
@@ -171,7 +164,6 @@ function renderAllCards() {
     });
 }
 
-// CẬP NHẬT NỘI DUNG 1 THẺ
 function updateCardContent(card, worker, displayIndex) {
     const isRunning = worker.isRunning || worker.status === 'RUNNING' || worker.status === 'STARTING';
     const isAlert = worker.status === 'PAUSED_CAPTCHA' || worker.status === 'ERROR';
@@ -192,6 +184,26 @@ function updateCardContent(card, worker, displayIndex) {
         statusBadge = '<span class="status-badge text-primary">🎉 Đã hoàn thành</span>';
     } else {
         statusBadge = '<span class="status-badge" style="color: var(--text-dim);">⚪ Sẵn sàng</span>';
+    }
+
+    // Bảng tiến độ các môn học (nếu đã nạp từ server)
+    let overviewHtml = '';
+    if (worker.courseOverview && worker.courseOverview.length > 0) {
+        overviewHtml = `
+            <div class="course-overview-box">
+                <div class="overview-title">📚 Tiến độ các môn học trên hệ thống:</div>
+                <div class="overview-grid">
+                    ${worker.courseOverview.map(c => `
+                        <div class="overview-row ${c.status === 'Đạt' ? 'status-pass' : 'status-fail'}">
+                            <span class="c-name" title="${c.name}">${c.name}</span>
+                            <span class="c-prog">${c.progress}</span>
+                            <span class="c-hours">${c.hours}</span>
+                            <span class="c-badge">${c.status}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
     }
 
     card.innerHTML = `
@@ -216,6 +228,8 @@ function updateCardContent(card, worker, displayIndex) {
             </div>
         ` : ''}
 
+        ${overviewHtml}
+
         <div class="card-form-grid">
             <div class="form-group">
                 <label>Số CCCD / Tên Đăng Nhập:</label>
@@ -228,25 +242,37 @@ function updateCardContent(card, worker, displayIndex) {
             <div class="form-group">
                 <label>Chế độ học:</label>
                 <select class="form-control" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'mode', this.value)">
-                    <option value="video" ${worker.mode === 'video' ? 'selected' : ''}>🎬 Học Video Bài Giảng</option>
+                    <option value="video" ${worker.mode === 'video' ? 'selected' : ''}>🎬 Học Video & Lý Thuyết (Tích lũy giờ)</option>
                     <option value="practice" ${worker.mode === 'practice' ? 'selected' : ''}>📝 Ôn Luyện Trắc Nghiệm</option>
                 </select>
             </div>
             <div class="form-group">
-                <label>${worker.mode === 'video' ? 'Môn học mục tiêu:' : 'Số câu hỏi làm:'}</label>
+                <label>${worker.mode === 'video' ? 'Môn học mục tiêu:' : 'Phần ôn luyện & Số câu:'}</label>
                 ${worker.mode === 'video' ? `
                     <select class="form-control" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'course', this.value)">
-                        <option value="Kỹ thuật lái xe" ${worker.course === 'Kỹ thuật lái xe' ? 'selected' : ''}>Kỹ thuật lái xe ô tô</option>
-                        <option value="Đạo đức" ${worker.course === 'Đạo đức' ? 'selected' : ''}>Đạo đức & Văn hóa giao thông</option>
-                        <option value="Cấu tạo" ${worker.course === 'Cấu tạo' ? 'selected' : ''}>Cấu tạo sửa chữa</option>
+                        <option value="all_incomplete" ${worker.course === 'all_incomplete' ? 'selected' : ''}>🚀 Tự động học TẤT CẢ các môn chưa đạt</option>
+                        <option value="Kỹ thuật lái xe" ${worker.course === 'Kỹ thuật lái xe' ? 'selected' : ''}>Kỹ thuật lái xe ô tô (20h)</option>
+                        <option value="Đạo đức" ${worker.course === 'Đạo đức' ? 'selected' : ''}>Đạo đức & Văn hóa GT & PCCC (14h)</option>
+                        <option value="Cấu tạo" ${worker.course === 'Cấu tạo' ? 'selected' : ''}>Cấu tạo sửa chữa (8h)</option>
+                        <option value="Phần 1" ${worker.course === 'Phần 1' ? 'selected' : ''}>Phần 1. Luật Trật tự ATGT (25h)</option>
+                        <option value="Phần 2" ${worker.course === 'Phần 2' ? 'selected' : ''}>Phần 2. Hệ thống báo hiệu (40h)</option>
+                        <option value="Phần 3" ${worker.course === 'Phần 3' ? 'selected' : ''}>Phần 3. Xử lý tình huống (25h)</option>
+                        <option value="Mô phỏng" ${worker.course === 'Mô phỏng' ? 'selected' : ''}>Mô phỏng các tình huống GT</option>
                     </select>
                 ` : `
-                    <select class="form-control" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'practiceCount', this.value)">
-                        <option value="20" ${worker.practiceCount == 20 ? 'selected' : ''}>20 câu trắc nghiệm</option>
-                        <option value="50" ${worker.practiceCount == 50 ? 'selected' : ''}>50 câu trắc nghiệm</option>
-                        <option value="60" ${worker.practiceCount == 60 ? 'selected' : ''}>60 câu (Phần 1)</option>
-                        <option value="185" ${worker.practiceCount == 185 ? 'selected' : ''}>185 câu (Phần 2 trọn bộ)</option>
-                    </select>
+                    <div style="display: flex; gap: 6px;">
+                        <select class="form-control" style="flex: 1.2;" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'practiceCourse', this.value)">
+                            <option value="Phần 1" ${worker.practiceCourse === 'Phần 1' ? 'selected' : ''}>Phần 1 (Luật ATGT)</option>
+                            <option value="Phần 2" ${worker.practiceCourse === 'Phần 2' ? 'selected' : ''}>Phần 2 (Báo hiệu)</option>
+                            <option value="Phần 3" ${worker.practiceCourse === 'Phần 3' ? 'selected' : ''}>Phần 3 (Tình huống)</option>
+                        </select>
+                        <select class="form-control" style="flex: 0.8;" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'practiceCount', this.value)">
+                            <option value="20" ${worker.practiceCount == 20 ? 'selected' : ''}>20 câu</option>
+                            <option value="50" ${worker.practiceCount == 50 ? 'selected' : ''}>50 câu</option>
+                            <option value="60" ${worker.practiceCount == 60 ? 'selected' : ''}>60 câu</option>
+                            <option value="185" ${worker.practiceCount == 185 ? 'selected' : ''}>185 câu</option>
+                        </select>
+                    </div>
                 `}
             </div>
         </div>
@@ -290,12 +316,10 @@ function updateCardContent(card, worker, displayIndex) {
         </div>
     `;
 
-    // Tự động cuộn log xuống cuối
     const logBox = document.getElementById(`logs_${worker.id}`);
     if (logBox) logBox.scrollTop = logBox.scrollHeight;
 }
 
-// CẬP NHẬT TIẾN ĐỘ ĐƠN LẺ KHÔNG LÀM MẤT FOCUS FORM
 function updateSingleWorkerProgress(id, progress, statusMessage, status) {
     const pctEl = document.getElementById(`pct_${id}`);
     const fillEl = document.getElementById(`fill_${id}`);
@@ -308,7 +332,6 @@ function updateSingleWorkerProgress(id, progress, statusMessage, status) {
     if (statusMsgEl) statusMsgEl.innerText = statusMessage || '';
 }
 
-// THÊM DÒNG LOG MỚI
 function appendLogToCard(id, log) {
     const logBox = document.getElementById(`logs_${id}`);
     if (logBox) {
@@ -320,7 +343,6 @@ function appendLogToCard(id, log) {
     }
 }
 
-// CÁC HÀM TƯƠNG TÁC TỪ GIAO DIỆN
 function updateAccountField(id, field, value) {
     sendAction('update', id, { [field]: value });
 }
@@ -341,23 +363,20 @@ function deleteAccount(id) {
 
 function openPopout(id) {
     const width = 600;
-    const height = 750;
+    const height = 780;
     const left = (screen.width - width) / 2;
     const top = (screen.height - height) / 2;
     window.open(`/index.html?id=${id}`, `Popout_${id}`, `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`);
 }
 
-// SỰ KIỆN NÚT TOÀN CỤC
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
 
-    // Nút Bắt đầu tất cả / Dừng tất cả
     const btnStartAll = document.getElementById('btnStartAll');
     const btnStopAll = document.getElementById('btnStopAll');
     if (btnStartAll) btnStartAll.onclick = () => sendAction('start_all');
     if (btnStopAll) btnStopAll.onclick = () => sendAction('stop_all');
 
-    // Chuyển đổi chế độ xem 4 Ô Lưới / Danh Sách
     const btnGrid = document.getElementById('btnGridMode');
     const btnList = document.getElementById('btnListMode');
     const container = document.getElementById('cardsContainer');
@@ -375,7 +394,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Modal Thêm Tài Khoản
     const modal = document.getElementById('modalAdd');
     const btnAdd = document.getElementById('btnAddAccount');
     const btnClose = document.getElementById('btnCloseModal');

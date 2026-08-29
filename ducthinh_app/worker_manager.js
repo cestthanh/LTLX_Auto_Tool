@@ -18,7 +18,8 @@ class WorkerManager {
             username: options.username || "",
             password: options.password || "123",
             mode: options.mode || "video", // "video" hoặc "practice"
-            course: options.course || "Kỹ thuật lái xe",
+            course: options.course || "all_incomplete", // "all_incomplete", "Kỹ thuật lái xe", "Đạo đức", "Cấu tạo", "Phần 1", "Phần 2", "Phần 3", "Mô phỏng"
+            practiceCourse: options.practiceCourse || "Phần 2",
             practiceCount: parseInt(options.practiceCount || 20, 10),
             headless: options.headless !== undefined ? options.headless : false,
             status: "IDLE", // IDLE, STARTING, RUNNING, PAUSED_CAPTCHA, ERROR, COMPLETED
@@ -30,6 +31,7 @@ class WorkerManager {
                 percent: 0,
                 detail: "Chưa bắt đầu"
             },
+            courseOverview: [], // Bảng tiến độ tất cả các môn học [ { name, progress, hours, status } ]
             logs: [],
             lastScreenshot: null,
             browserInstance: null,
@@ -52,6 +54,7 @@ class WorkerManager {
         if (options.password !== undefined) worker.password = options.password;
         if (options.mode !== undefined) worker.mode = options.mode;
         if (options.course !== undefined) worker.course = options.course;
+        if (options.practiceCourse !== undefined) worker.practiceCourse = options.practiceCourse;
         if (options.practiceCount !== undefined) worker.practiceCount = parseInt(options.practiceCount, 10);
         if (options.headless !== undefined) worker.headless = options.headless;
 
@@ -78,7 +81,7 @@ class WorkerManager {
         const time = new Date().toLocaleTimeString("vi-VN", { hour12: false });
         const logEntry = { time, message, type };
         worker.logs.push(logEntry);
-        if (worker.logs.length > 80) worker.logs.shift(); // Giữ 80 log gần nhất
+        if (worker.logs.length > 80) worker.logs.shift();
 
         this.broadcast({
             event: "log",
@@ -174,7 +177,6 @@ class WorkerManager {
 
         this.addLog(id, `Bắt đầu phiên làm việc [Tài khoản: ${worker.username} | Chế độ: ${worker.mode.toUpperCase()}]`);
 
-        // Khởi chạy ngầm trong background
         (async () => {
             let app = null;
             try {
@@ -195,7 +197,7 @@ class WorkerManager {
 
                 worker.browserInstance = app;
 
-                // Hook vào bắt Captcha của browser
+                // Hook kiểm tra Captcha
                 const origHandleVerification = app.handleHumanVerificationIfNeeded.bind(app);
                 app.handleHumanVerificationIfNeeded = async () => {
                     const check = await app.checkForHumanVerification();
@@ -216,125 +218,150 @@ class WorkerManager {
                     }
                 };
 
-                // Hook ghi log vào UI
-                const origPlayMedia = app.playCurrentMedia.bind(app);
-                app.playCurrentMedia = async (...args) => {
-                    const info = await origPlayMedia(...args);
-                    if (info && info.hasMedia) {
-                        this.addLog(id, `🎬 Phát: "${info.title}" (~${Math.round(info.duration/60)} phút)`, "info");
-                    }
-                    return info;
-                };
-
                 // BƯỚC 1: ĐĂNG NHẬP
                 this.addLog(id, "Đang đăng nhập vào hệ thống ducthinh.huelms.com...");
                 await app.login(worker.username, worker.password);
                 this.addLog(id, "Đăng nhập thành công!", "success");
                 await this.captureLivePreview(id);
 
+                // LẤY BẢNG TIẾN ĐỘ TỔNG QUAN TẤT CẢ CÁC MÔN HỌC
+                const overview = await app.getCourseProgressOverview();
+                worker.courseOverview = overview;
+                this.notifyState();
+
+                if (overview.length > 0) {
+                    this.addLog(id, `Đã nạp bảng tiến độ ${overview.length} môn học từ hệ thống!`, "info");
+                }
+
                 worker.status = "RUNNING";
                 this.notifyState();
 
                 if (worker.mode === "video") {
-                    // CHẾ ĐỘ 1: HỌC BÀI GIẢNG ĐIỆN TỬ & VIDEO
-                    const targetCourse = worker.course || "Kỹ thuật lái xe";
-                    this.addLog(id, `Mở khóa học: "${targetCourse}"...`);
-                    await app.openCourse(targetCourse);
-                    await this.captureLivePreview(id);
+                    // === CHẾ ĐỘ 1: HỌC BÀI GIẢNG ĐIỆN TỬ & VIDEO ===
+                    let coursesToLearn = [];
 
-                    this.addLog(id, `Mở mục "Bài giảng điện tử"...`);
-                    await app.openTask("Bài giảng điện tử");
-                    await this.captureLivePreview(id);
+                    if (worker.course === "all_incomplete" || !worker.course) {
+                        // Tự động tìm các môn chưa đạt hoặc chưa đủ giờ
+                        coursesToLearn = [
+                            "Kỹ thuật lái xe",
+                            "Cấu tạo",
+                            "Phần 1",
+                            "Phần 2",
+                            "Phần 3",
+                            "Đạo đức"
+                        ];
+                        this.addLog(id, "Chế độ [Tự động học tất cả môn]: Sẽ lần lượt quét và học toàn bộ các môn học!", "info");
+                    } else {
+                        coursesToLearn = [worker.course];
+                    }
 
-                    // Tự động tìm bài chưa học và học tiếp
-                    this.addLog(id, "Quét danh mục và tự động học các bài/video CHƯA HOÀN THÀNH...");
-                    await app.jumpToFirstUncompletedLesson();
-
-                    // Vòng lặp học bài
-                    for (let lessonIdx = 1; lessonIdx <= 60; lessonIdx++) {
+                    for (const targetCourse of coursesToLearn) {
                         if (!worker.isRunning) break;
 
-                        const media = await app.playCurrentMedia(1.25, true);
-                        await this.captureLivePreview(id);
+                        this.addLog(id, `\n=== MỞ KHÓA HỌC: "${targetCourse}" ===`);
+                        try {
+                            await app.page.goto(`${config.baseUrl}/student/ep`, { waitUntil: "domcontentloaded" });
+                            await new Promise(r => setTimeout(r, 2500));
 
-                        if (media && media.hasMedia) {
-                            const dur = media.duration || 120;
-                            // Theo dõi thời gian phát
-                            while (worker.isRunning) {
-                                await new Promise(r => setTimeout(r, 2000));
-                                await app.handleHumanVerificationIfNeeded();
+                            await app.openCourse(targetCourse);
+                            await this.captureLivePreview(id);
 
-                                const status = await app.safeEvaluate(() => {
-                                    const audios = Array.from(document.querySelectorAll('audio'));
-                                    const videos = Array.from(document.querySelectorAll('video'));
-                                    const m = videos.find(v => v.duration > 0) || audios.find(a => a.duration > 0) || videos[0] || audios[0];
-                                    if (m) {
-                                        if (m.paused && m.currentTime < (m.duration - 1)) m.play().catch(() => {});
-                                        return {
-                                            currentTime: Math.round(m.currentTime),
-                                            duration: Math.round(m.duration),
-                                            isEnded: m.ended || (m.duration > 0 && m.currentTime >= (m.duration - 0.8))
-                                        };
+                            this.addLog(id, `Mở mục "Bài giảng điện tử" trong môn ${targetCourse}...`);
+                            await app.openTask("Bài giảng điện tử");
+                            await this.captureLivePreview(id);
+
+                            // Tự động tìm bài chưa hoàn thành và học tiếp
+                            this.addLog(id, "Quét danh mục và tự động học các bài/video CHƯA HOÀN THÀNH...");
+                            await app.jumpToFirstUncompletedLesson();
+
+                            // Vòng lặp học bài trong môn
+                            for (let lessonIdx = 1; lessonIdx <= 60; lessonIdx++) {
+                                if (!worker.isRunning) break;
+
+                                const media = await app.playCurrentMedia(1.25, true);
+                                await this.captureLivePreview(id);
+
+                                if (media && media.hasMedia) {
+                                    const dur = media.duration || 120;
+                                    while (worker.isRunning) {
+                                        await new Promise(r => setTimeout(r, 2000));
+                                        await app.handleHumanVerificationIfNeeded();
+
+                                        const status = await app.safeEvaluate(() => {
+                                            const audios = Array.from(document.querySelectorAll('audio'));
+                                            const videos = Array.from(document.querySelectorAll('video'));
+                                            const m = videos.find(v => v.duration > 0) || audios.find(a => a.duration > 0) || videos[0] || audios[0];
+                                            if (m) {
+                                                if (m.paused && m.currentTime < (m.duration - 1)) m.play().catch(() => {});
+                                                return {
+                                                    currentTime: Math.round(m.currentTime),
+                                                    duration: Math.round(m.duration),
+                                                    isEnded: m.ended || (m.duration > 0 && m.currentTime >= (m.duration - 0.8))
+                                                };
+                                            }
+                                            return { isEnded: true };
+                                        });
+
+                                        if (!status || status.isEnded) break;
+
+                                        const cur = status.currentTime || 0;
+                                        const total = status.duration || dur;
+                                        const pct = Math.round((cur / (total || 1)) * 100);
+                                        const curM = Math.floor(cur / 60).toString().padStart(2, '0');
+                                        const curS = (cur % 60).toString().padStart(2, '0');
+                                        const totM = Math.floor(total / 60).toString().padStart(2, '0');
+                                        const totS = (total % 60).toString().padStart(2, '0');
+
+                                        this.updateProgress(id, {
+                                            current: cur,
+                                            total: total,
+                                            percent: pct,
+                                            detail: `[${curM}:${curS} / ${totM}:${totS}] (${media.title})`,
+                                            statusMessage: `[${targetCourse}] Đang học: ${media.title}`
+                                        });
+
+                                        if (cur % 12 === 0) {
+                                            await this.captureLivePreview(id);
+                                        }
                                     }
-                                    return { isEnded: true };
-                                });
+                                    this.addLog(id, `✓ Hoàn thành: "${media.title}"`, "success");
+                                } else {
+                                    this.addLog(id, "📄 Đang xem tài liệu đọc (giữ 15s để tích lũy giờ)...");
+                                    for (let s = 15; s > 0; s--) {
+                                        if (!worker.isRunning) break;
+                                        this.updateProgress(id, {
+                                            current: 15 - s,
+                                            total: 15,
+                                            percent: Math.round(((15 - s) / 15) * 100),
+                                            detail: `Ghi nhận tài liệu: ${s}s`,
+                                            statusMessage: `[${targetCourse}] Tài liệu đọc (${s}s)`
+                                        });
+                                        await new Promise(r => setTimeout(r, 1000));
+                                    }
+                                }
 
-                                if (!status || status.isEnded) break;
+                                if (!worker.isRunning) break;
 
-                                const cur = status.currentTime || 0;
-                                const total = status.duration || dur;
-                                const pct = Math.round((cur / (total || 1)) * 100);
-                                const curM = Math.floor(cur / 60).toString().padStart(2, '0');
-                                const curS = (cur % 60).toString().padStart(2, '0');
-                                const totM = Math.floor(total / 60).toString().padStart(2, '0');
-                                const totS = (total % 60).toString().padStart(2, '0');
+                                const hasNext = await app.nextLesson();
+                                await this.captureLivePreview(id);
 
-                                this.updateProgress(id, {
-                                    current: cur,
-                                    total: total,
-                                    percent: pct,
-                                    detail: `[${curM}:${curS} / ${totM}:${totS}] (${media.title})`,
-                                    statusMessage: `Đang xem: ${media.title}`
-                                });
-
-                                if (cur % 10 === 0) {
-                                    await this.captureLivePreview(id);
+                                if (!hasNext) {
+                                    this.addLog(id, `🎉 Đã hoàn thành toàn bộ bài giảng trong môn: "${targetCourse}"!`, "success");
+                                    break;
                                 }
                             }
-                            this.addLog(id, `✓ Hoàn thành: "${media.title}"`, "success");
-                        } else {
-                            this.addLog(id, "📄 Đang xem tài liệu đọc (giữ 15s để tích lũy giờ)...");
-                            for (let s = 15; s > 0; s--) {
-                                if (!worker.isRunning) break;
-                                this.updateProgress(id, {
-                                    current: 15 - s,
-                                    total: 15,
-                                    percent: Math.round(((15 - s) / 15) * 100),
-                                    detail: `Ghi nhận tài liệu: ${s}s`,
-                                    statusMessage: `Tài liệu đọc (${s}s)`
-                                });
-                                await new Promise(r => setTimeout(r, 1000));
-                            }
-                        }
-
-                        if (!worker.isRunning) break;
-
-                        // Chuyển bài kế tiếp
-                        this.addLog(id, "Chuyển sang bài học tiếp theo...");
-                        const hasNext = await app.nextLesson();
-                        await this.captureLivePreview(id);
-
-                        if (!hasNext) {
-                            this.addLog(id, "🎉 Đã hoàn thành toàn bộ bài giảng trong môn học!", "success");
-                            break;
+                        } catch (courseErr) {
+                            this.addLog(id, `Lưu ý môn ${targetCourse}: ${courseErr.message} (Chuyển tiếp môn tiếp theo nếu có)`, "warning");
                         }
                     }
 
                 } else {
-                    // CHẾ ĐỘ 2: ÔN LUYỆN TRẮC NGHIỆM
+                    // === CHẾ ĐỘ 2: ÔN LUYỆN TRẮC NGHIỆM ===
+                    const practiceCourse = worker.practiceCourse || "Phần 2";
                     const count = worker.practiceCount || 20;
-                    this.addLog(id, `Mở khóa học Phần 2 (Hệ thống báo hiệu đường bộ)...`);
-                    await app.openCourse("Phần 2. Hệ thống báo hiệu đường bộ");
+
+                    this.addLog(id, `Mở khóa học: "${practiceCourse}" để ôn luyện...`);
+                    await app.openCourse(practiceCourse);
                     await this.captureLivePreview(id);
 
                     this.addLog(id, `Mở mục "Ôn luyện"...`);
@@ -345,9 +372,8 @@ class WorkerManager {
                     await app.startPracticeAll();
                     await this.captureLivePreview(id);
 
-                    this.addLog(id, `Bắt đầu tự động giải ${count} câu hỏi trắc nghiệm...`);
+                    this.addLog(id, `Bắt đầu tự động giải ${count} câu hỏi trắc nghiệm trong ${practiceCourse}...`);
 
-                    // Giải câu hỏi với thanh tiến độ realtime
                     for (let q = 1; q <= count; q++) {
                         if (!worker.isRunning) break;
 
@@ -382,14 +408,12 @@ class WorkerManager {
                             total: count,
                             percent: pct,
                             detail: `Câu ${q}/${count} (${qInfo.title}...)`,
-                            statusMessage: `Đang làm câu ${q}/${count}`
+                            statusMessage: `[${practiceCourse}] Đang làm câu ${q}/${count}`
                         });
 
-                        // Đọc đề và cuộn
                         await new Promise(r => setTimeout(r, 1000));
                         try { await app.page.mouse.wheel({ deltaY: 30 }); } catch (e) {}
 
-                        // Click đáp án
                         let clicked = false;
                         if (qInfo.qId) {
                             clicked = await app.smoothMoveAndClick(`label[for="${qInfo.qId}-${targetIndex}"]`);
@@ -401,11 +425,9 @@ class WorkerManager {
                             } catch (e) {}
                         }
 
-                        // Giữ câu 3s
                         await new Promise(r => setTimeout(r, 3000));
                         await this.captureLivePreview(id);
 
-                        // Bấm Tiếp
                         await app.safeEvaluate(() => {
                             const btns = Array.from(document.querySelectorAll('button, .ant-btn, a'));
                             for (const b of btns) {
@@ -473,7 +495,7 @@ class WorkerManager {
     async startAll() {
         for (const [id] of this.workers) {
             await this.startWorker(id);
-            await new Promise(r => setTimeout(r, 2000)); // Giãn cách 2s để không mở đồng loạt quá tải
+            await new Promise(r => setTimeout(r, 2500));
         }
     }
 
@@ -498,13 +520,15 @@ class WorkerManager {
                 password: w.password,
                 mode: w.mode,
                 course: w.course,
+                practiceCourse: w.practiceCourse,
                 practiceCount: w.practiceCount,
                 headless: w.headless,
                 status: w.status,
                 statusMessage: w.statusMessage,
                 alert: w.alert,
                 progress: w.progress,
-                logs: w.logs.slice(-20),
+                courseOverview: w.courseOverview || [],
+                logs: w.logs.slice(-25),
                 lastScreenshot: w.lastScreenshot,
                 isRunning: w.isRunning
             });

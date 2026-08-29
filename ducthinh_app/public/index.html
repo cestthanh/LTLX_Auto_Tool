@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="dark-theme">
-    <!-- NỀN HIỆU ỨNG GLOW -->
     <div class="background-blobs">
         <div class="blob blob-1"></div>
         <div class="blob blob-2"></div>
@@ -115,24 +114,29 @@
                     <input type="password" id="newPassword" value="123" class="form-control">
                 </div>
                 <div class="form-group">
-                    <label>Chế độ học mặc định:</label>
+                    <label>Chế độ học:</label>
                     <select id="newMode" class="form-control">
-                        <option value="video">🎬 Tự động Học Video Bài Giảng</option>
+                        <option value="video">🎬 Tự động Học Video & Lý Thuyết (Tích lũy giờ)</option>
                         <option value="practice">📝 Tự động Ôn Luyện Trắc Nghiệm</option>
                     </select>
                 </div>
                 <div class="form-group" id="groupCourse">
-                    <label>Môn học:</label>
+                    <label>Môn học mục tiêu:</label>
                     <select id="newCourse" class="form-control">
-                        <option value="Kỹ thuật lái xe">Kỹ thuật lái xe ô tô</option>
-                        <option value="Đạo đức">Đạo đức người lái xe & Văn hóa giao thông</option>
-                        <option value="Cấu tạo">Cấu tạo sửa chữa</option>
+                        <option value="all_incomplete">🚀 Tự động học TẤT CẢ các môn chưa đạt</option>
+                        <option value="Kỹ thuật lái xe">Kỹ thuật lái xe ô tô (20 giờ)</option>
+                        <option value="Đạo đức">Đạo đức & Văn hóa giao thông & PCCC (14 giờ)</option>
+                        <option value="Cấu tạo">Cấu tạo sửa chữa (8 giờ)</option>
+                        <option value="Phần 1">Phần 1. Luật Trật tự, an toàn giao thông (25 giờ)</option>
+                        <option value="Phần 2">Phần 2. Hệ thống báo hiệu đường bộ (40 giờ)</option>
+                        <option value="Phần 3">Phần 3. Xử lý các tình huống giao thông (25 giờ)</option>
+                        <option value="Mô phỏng">Mô phỏng các tình huống giao thông</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="newHeadless">
-                        <span>Chạy ẩn trình duyệt (Headless - tiết kiệm tài nguyên)</span>
+                        <span>Chạy ẩn trình duyệt (Headless - Tiết kiệm tài nguyên)</span>
                     </label>
                 </div>
             </div>

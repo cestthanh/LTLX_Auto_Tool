@@ -5,29 +5,73 @@ module.exports = {
     domain: "ducthinh",
     baseUrl: "https://ducthinh.huelms.com",
     apiUrl: "https://staging-api.lotuslms.com",
-
+    
     // Thông tin tài khoản mặc định
     account: {
         username: "035099002016",
         password: "123"
     },
 
-    // Thông tin các khóa học chính
-    courses: {
-        phan1: {
-            iid: 32672244,
-            name: "Phần 1. Luật Trật tự, an toàn giao thông đường bộ"
+    // Danh sách toàn bộ các môn học trong chương trình đào tạo
+    allCourses: [
+        {
+            key: "dao_duc",
+            shortName: "Đạo đức",
+            fullName: "Đạo đức người lái xe, văn hóa giao thông và kỹ năng PCCC và cứu nạn, cứu hộ",
+            requiredHours: 14,
+            hasVideo: true,
+            hasPractice: true
         },
-        phan2: {
-            iid: 32672246,
-            name: "Phần 2. Hệ thống báo hiệu đường bộ",
-            totalQuestions: 185
+        {
+            key: "ky_thuat",
+            shortName: "Kỹ thuật lái xe",
+            fullName: "Kỹ thuật lái xe ô tô",
+            requiredHours: 20,
+            hasVideo: true,
+            hasPractice: true
         },
-        phan3: {
-            iid: 32672248,
-            name: "Phần 3. Xử lý các tình huống giao thông"
+        {
+            key: "cau_tao",
+            shortName: "Cấu tạo",
+            fullName: "Cấu tạo sửa chữa",
+            requiredHours: 8,
+            hasVideo: true,
+            hasPractice: true
+        },
+        {
+            key: "phan1",
+            shortName: "Phần 1",
+            fullName: "Phần 1. Luật Trật tự, an toàn giao thông đường bộ",
+            requiredHours: 25,
+            hasVideo: true,
+            hasPractice: true
+        },
+        {
+            key: "phan2",
+            shortName: "Phần 2",
+            fullName: "Phần 2. Hệ thống báo hiệu đường bộ",
+            requiredHours: 40,
+            totalQuestions: 185,
+            hasVideo: true,
+            hasPractice: true
+        },
+        {
+            key: "phan3",
+            shortName: "Phần 3",
+            fullName: "Phần 3. Xử lý các tình huống giao thông",
+            requiredHours: 25,
+            hasVideo: true,
+            hasPractice: true
+        },
+        {
+            key: "mo_phong",
+            shortName: "Mô phỏng",
+            fullName: "Mô phỏng các tình huống giao thông",
+            requiredHours: 0,
+            hasVideo: false,
+            hasPractice: true
         }
-    },
+    ],
 
     // Cấu hình luyện thi trắc nghiệm
     practice: {
@@ -41,13 +85,13 @@ module.exports = {
     video: {
         playbackRate: 1.25,      // Tốc độ phát bài giảng (1.0x - 1.5x)
         muteAudio: true,         // Tự động tắt tiếng để không làm phiền bạn
-        maxLessons: 50,          // Số bài học/video tối đa trong 1 phiên
+        maxLessons: 60,          // Số bài học/video tối đa trong 1 phiên
         maxHoursPerDay: 8        // Giới hạn giờ học tối đa theo quy định (8h/ngày)
     },
 
     // Cấu hình trình duyệt
     browser: {
-        headless: false, // Mở cửa sổ trực quan trên màn hình
+        headless: false,
         viewport: null,
         args: [
             "--start-maximized",
