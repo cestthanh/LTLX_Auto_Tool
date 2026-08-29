@@ -600,7 +600,7 @@ class DucthinhBrowser {
     }
 
     /**
-     * Tự động bấm "Kết thúc luyện thi" và xác nhận nộp bài
+     * Tự động bấm "Kết thúc luyện thi" và xác nhận nộp bài (Auto Click [OK] trên popup)
      */
     async finishPractice() {
         if (!this.page) return;
@@ -638,22 +638,50 @@ class DucthinhBrowser {
             }
         }
 
-        await new Promise(r => setTimeout(r, 2000));
+        // Đợi popup modal "Xác nhận: Bạn có chắc chắn muốn kết thúc luyện tập không?"
+        console.log("[*] Đang đợi và tự động xác nhận [OK] trên popup...");
+        await new Promise(r => setTimeout(r, 1500));
 
-        // Xác nhận popup nộp bài nếu có ("Xác nhận", "Đồng ý", "Nộp bài")
-        await this.safeEvaluate(() => {
-            const modals = Array.from(document.querySelectorAll('.ant-modal, .modal, [role="dialog"], .ant-modal-content'));
-            for (const m of modals) {
-                const btns = Array.from(m.querySelectorAll('button, .ant-btn, div.btn'));
-                for (const b of btns) {
-                    const txt = b.innerText.trim();
-                    if (txt === "Đồng ý" || txt === "Xác nhận" || txt === "Nộp bài" || txt.includes("Đồng ý")) {
-                        b.click();
-                        return;
+        // Thử tìm nút OK và di chuột click như người thật
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            const okBtnHandle = await this.page.evaluateHandle(() => {
+                const modals = Array.from(document.querySelectorAll('.ant-modal, .modal, [role="dialog"], .ant-modal-content, .ant-modal-confirm'));
+                for (const m of modals) {
+                    const btns = Array.from(m.querySelectorAll('button, .ant-btn, div.btn'));
+                    for (const b of btns) {
+                        const txt = b.innerText.trim().toUpperCase();
+                        if (txt === "OK" || txt === "ĐỒNG Ý" || txt === "XÁC NHẬN" || txt === "NỘP BÀI" || b.classList.contains("ant-btn-primary")) {
+                            return b;
+                        }
                     }
                 }
+                return null;
+            });
+
+            if (okBtnHandle && okBtnHandle.asElement()) {
+                await this.smoothMoveAndClick(okBtnHandle.asElement());
+                console.log("[✓] Đã tự động di chuột và nhấp nút: [OK] trên hộp thoại xác nhận!");
+                break;
+            } else {
+                // Fallback bằng DOM click
+                const confirmed = await this.safeEvaluate(() => {
+                    const buttons = Array.from(document.querySelectorAll('.ant-modal-confirm-btns button, .ant-modal button, [role="dialog"] button'));
+                    for (const b of buttons) {
+                        const txt = b.innerText.trim().toUpperCase();
+                        if (txt === "OK" || txt === "ĐỒNG Ý" || txt === "XÁC NHẬN" || txt === "NỘP BÀI" || b.classList.contains("ant-btn-primary")) {
+                            b.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+                if (confirmed) {
+                    console.log("[✓] Đã xác nhận [OK] thành công!");
+                    break;
+                }
             }
-        });
+            await new Promise(r => setTimeout(r, 1000));
+        }
 
         await new Promise(r => setTimeout(r, 3000));
 
