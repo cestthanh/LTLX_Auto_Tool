@@ -260,17 +260,22 @@ function updateCardContent(card, worker, displayIndex) {
                         <option value="Mô phỏng" ${worker.course === 'Mô phỏng' ? 'selected' : ''}>Mô phỏng các tình huống GT</option>
                     </select>
                 ` : `
-                    <div style="display: flex; gap: 6px;">
-                        <select class="form-control" style="flex: 1.2;" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'practiceCourse', this.value)">
-                            <option value="Phần 1" ${worker.practiceCourse === 'Phần 1' ? 'selected' : ''}>Phần 1 (Luật ATGT)</option>
-                            <option value="Phần 2" ${worker.practiceCourse === 'Phần 2' ? 'selected' : ''}>Phần 2 (Báo hiệu)</option>
-                            <option value="Phần 3" ${worker.practiceCourse === 'Phần 3' ? 'selected' : ''}>Phần 3 (Tình huống)</option>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <select class="form-control" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'practiceCourse', this.value)">
+                            <option value="Phần 1" ${worker.practiceCourse === 'Phần 1' ? 'selected' : ''}>Phần 1. Luật Trật tự, ATGT đường bộ</option>
+                            <option value="Phần 2" ${worker.practiceCourse === 'Phần 2' ? 'selected' : ''}>Phần 2. Hệ thống báo hiệu đường bộ</option>
+                            <option value="Phần 3" ${worker.practiceCourse === 'Phần 3' ? 'selected' : ''}>Phần 3. Xử lý các tình huống giao thông</option>
+                            <option value="Kỹ thuật lái xe" ${worker.practiceCourse === 'Kỹ thuật lái xe' ? 'selected' : ''}>Kỹ thuật lái xe ô tô</option>
+                            <option value="Cấu tạo" ${worker.practiceCourse === 'Cấu tạo' ? 'selected' : ''}>Cấu tạo sửa chữa xe ô tô</option>
+                            <option value="Đạo đức" ${worker.practiceCourse === 'Đạo đức' ? 'selected' : ''}>Đạo đức, Văn hóa GT & PCCC</option>
+                            <option value="Mô phỏng" ${worker.practiceCourse === 'Mô phỏng' ? 'selected' : ''}>Mô phỏng các tình huống giao thông</option>
                         </select>
-                        <select class="form-control" style="flex: 0.8;" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'practiceCount', this.value)">
-                            <option value="20" ${worker.practiceCount == 20 ? 'selected' : ''}>20 câu</option>
-                            <option value="50" ${worker.practiceCount == 50 ? 'selected' : ''}>50 câu</option>
-                            <option value="60" ${worker.practiceCount == 60 ? 'selected' : ''}>60 câu</option>
-                            <option value="185" ${worker.practiceCount == 185 ? 'selected' : ''}>185 câu</option>
+                        <select class="form-control" ${isRunning ? 'disabled' : ''} onchange="updateAccountField('${worker.id}', 'practiceCount', this.value)">
+                            <option value="20" ${worker.practiceCount == 20 ? 'selected' : ''}>Làm 20 câu trắc nghiệm</option>
+                            <option value="35" ${worker.practiceCount == 35 ? 'selected' : ''}>Làm 35 câu (Đề thi chuẩn B2)</option>
+                            <option value="50" ${worker.practiceCount == 50 ? 'selected' : ''}>Làm 50 câu trắc nghiệm</option>
+                            <option value="60" ${worker.practiceCount == 60 ? 'selected' : ''}>Làm 60 câu trắc nghiệm</option>
+                            <option value="185" ${worker.practiceCount == 185 ? 'selected' : ''}>Làm 185 câu (Toàn bộ phần)</option>
                         </select>
                     </div>
                 `}
