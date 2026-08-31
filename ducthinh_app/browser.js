@@ -209,10 +209,16 @@ class DucthinhBrowser {
 
         const loginUrl = `${this.config.baseUrl}/user/login`;
         console.log(`[*] Đang truy cập ${loginUrl}...`);
-        await this.page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+        
+        try {
+            await this.page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+        } catch (e) {
+            // LotusLMS tải hơn 120 file JS chunks ngầm nên sự kiện domcontentloaded có thể bị trễ,
+            // ta chỉ cần đợi form đăng nhập xuất hiện trong DOM là tiếp tục ngay!
+        }
 
         console.log(`[*] Nhập tài khoản: ${username}`);
-        await this.page.waitForSelector('input[name="lname"], input[type="text"]', { timeout: 20000 });
+        await this.page.waitForSelector('input[name="lname"], input[type="text"]', { timeout: 30000 });
         
         const userInput = await this.page.$('input[name="lname"], input[type="text"]');
         await userInput.type(username, { delay: 40 });

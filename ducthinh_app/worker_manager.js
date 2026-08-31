@@ -318,7 +318,9 @@ class WorkerManager {
 
                         this.addLog(id, `\n=== MỞ KHÓA HỌC: "${targetCourse}" ===`);
                         try {
-                            await app.page.goto(`${config.baseUrl}/student/ep`, { waitUntil: "domcontentloaded" });
+                            try {
+                                await app.page.goto(`${config.baseUrl}/student/ep`, { waitUntil: "domcontentloaded", timeout: 15000 });
+                            } catch (e) {}
                             await new Promise(r => setTimeout(r, 2500));
 
                             await app.openCourse(targetCourse);
