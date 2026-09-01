@@ -199,12 +199,16 @@ class WorkerManager {
                 this.addLog(id, "Đăng nhập thành công! Đang lấy bảng tiến độ 6 môn học...", "info");
 
                 const overview = await app.getCourseProgressOverview();
+                if (!overview || overview.length === 0) {
+                    throw new Error("Dữ liệu bảng môn học chưa sẵn sàng từ máy chủ (đang thử lại...)");
+                }
+
                 worker.courseOverview = overview;
                 worker.step = "SCANNED";
                 worker.status = "IDLE";
                 worker.statusMessage = `Đã quét xong: Tìm thấy ${overview.length} môn học!`;
 
-                this.addLog(id, `[✓] Quét hoàn tất! Đã cập nhật trạng thái chi tiết của tất cả các môn.`, "success");
+                this.addLog(id, `[✓] Quét hoàn tất! Đã cập nhật trạng thái chi tiết của tất cả các môn (${overview.length} môn).`, "success");
                 await app.close();
                 lastErr = null;
                 break;

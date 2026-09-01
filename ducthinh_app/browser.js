@@ -267,34 +267,68 @@ class DucthinhBrowser {
     }
 
     /**
-     * Lấy bảng tổng quan tiến độ của tất cả các môn học trên Dashboard
+     * Lấy bảng tổng quan tiến độ của tất cả các môn học trên Dashboard (Chống mất dữ liệu khi quét đồng thời)
      */
     async getCourseProgressOverview() {
         if (!this.page) return [];
-        return await this.safeEvaluate(() => {
-            // Mở rộng tất cả các nhóm môn học
-            const expandIcons = Array.from(document.querySelectorAll('.ant-table-row-expand-icon-collapsed, [class*="expand-icon-collapsed"]'));
-            for (const icon of expandIcons) {
-                try { icon.click(); } catch(e) {}
-            }
 
-            const rows = Array.from(document.querySelectorAll('tr.ant-table-row, tr'));
-            const list = [];
-            for (const r of rows) {
-                const text = r.innerText ? r.innerText.trim() : "";
-                if (!text || text.includes("Tên lớp học") || text.includes("Tiến độ")) continue;
-                
-                const cells = Array.from(r.querySelectorAll('td')).map(c => c.innerText.trim());
-                if (cells.length >= 3) {
-                    const name = cells[0].replace(/\n/g, ' ').replace(/-/g, '').trim();
-                    const progress = cells[1];
-                    const hours = cells[2];
-                    const status = cells[3] || (cells[1].includes("Đạt") ? "Đạt" : "Chưa đạt");
-                    list.push({ name, progress, hours, status });
+        // 1. Đảm bảo đang ở trang /student/ep (Trang tổng quan môn học)
+        let currentUrl = this.page.url();
+        if (!currentUrl.includes("/student/ep")) {
+            console.log("[*] Điều hướng tới trang tổng quan môn học /student/ep...");
+            try {
+                await this.page.goto(`${this.config.baseUrl}/student/ep`, { waitUntil: "domcontentloaded", timeout: 15000 });
+            } catch (e) {}
+        }
+
+        // 2. Chờ bảng môn học xuất hiện trong DOM (Tối đa 15s)
+        try {
+            await this.page.waitForSelector('.ant-table-row, tr.ant-table-row, td, table', { timeout: 15000 });
+        } catch (e) {}
+
+        // 3. Vòng lặp quét dữ liệu (chờ AJAX nạp đủ tất cả các môn, tự động mở rộng nhóm môn con)
+        let list = [];
+        for (let retry = 0; retry < 8; retry++) {
+            // Mở rộng tất cả các hàng accordion bị thu gọn
+            await this.safeEvaluate(() => {
+                const expandIcons = Array.from(document.querySelectorAll('.ant-table-row-expand-icon-collapsed, [class*="expand-icon-collapsed"], button.ant-table-row-expand-icon, .ant-table-row-expand-icon'));
+                for (const icon of expandIcons) {
+                    if (!icon.classList.contains('ant-table-row-expand-icon-expanded')) {
+                        try { icon.click(); } catch (e) {}
+                    }
                 }
+            });
+
+            await new Promise(r => setTimeout(r, 800));
+
+            list = await this.safeEvaluate(() => {
+                const rows = Array.from(document.querySelectorAll('tr.ant-table-row, tr'));
+                const result = [];
+                for (const r of rows) {
+                    const text = r.innerText ? r.innerText.trim() : "";
+                    if (!text || text.includes("Tên lớp học") || text.includes("Tiến độ") || text.includes("STT")) continue;
+                    
+                    const cells = Array.from(r.querySelectorAll('td')).map(c => c.innerText.trim());
+                    if (cells.length >= 3) {
+                        const name = cells[0].replace(/\n/g, ' ').replace(/-/g, '').trim();
+                        // Bỏ qua các hàng trống hoặc tiêu đề
+                        if (name.length < 3) continue;
+                        const progress = cells[1];
+                        const hours = cells[2];
+                        const status = cells[3] || (cells[1].includes("Đạt") ? "Đạt" : "Chưa đạt");
+                        result.push({ name, progress, hours, status });
+                    }
+                }
+                return result;
+            }) || [];
+
+            if (list.length >= 4) {
+                // Đã lấy được đầy đủ danh sách các môn học
+                break;
             }
-            return list;
-        }) || [];
+        }
+
+        return list;
     }
 
     /**
