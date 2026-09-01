@@ -3,6 +3,7 @@ let socket = null;
 let workersData = [];
 let audioCtx = null;
 let lastAlertTimes = {};
+const collapsedOverviewSet = new Set(); // Lưu trạng thái thu gọn bảng tiến độ
 
 const urlParams = new URLSearchParams(window.location.search);
 const popoutId = urlParams.get('id');
@@ -193,16 +194,27 @@ function updateCardContent(card, worker, displayIndex) {
     // Bảng tiến độ các môn học
     let overviewHtml = '';
     if (hasOverview) {
+        const isCollapsed = collapsedOverviewSet.has(worker.id);
         overviewHtml = `
             <div class="course-overview-box">
                 <div class="overview-header-row">
-                    <span class="overview-title">📊 Kết Quả Quét Tiến Độ 6 Môn Học:</span>
+                    <div class="overview-header-left">
+                        <span class="overview-title">📊 Tiến Độ 6 Môn Học:</span>
+                        <button class="btn-toggle-collapse" onclick="toggleOverviewCollapse('${worker.id}')" title="Ẩn/Hiện bảng tiến độ">
+                            <span>${isCollapsed ? '▼ Mở rộng' : '▲ Thu gọn'}</span>
+                        </button>
+                    </div>
                     <button class="btn-rescan" onclick="scanAccount('${worker.id}')" ${isRunning || isScanning ? 'disabled' : ''} title="Quét lại tiến độ mới nhất">🔄 Quét lại</button>
                 </div>
-                <div class="overview-grid">
-                    ${worker.courseOverview.map(c => `
-                        <div class="overview-row ${c.status === 'Đạt' ? 'status-pass' : 'status-fail'}">
-                            <span class="c-name" title="${c.name}">${c.name}</span>
+                <div class="overview-grid ${isCollapsed ? 'is-collapsed' : ''}" id="overview_grid_${worker.id}">
+                    ${worker.courseOverview.map((c, cIdx) => `
+                        <div class="overview-row ${c.status === 'Đạt' ? 'status-pass' : 'status-fail'}" 
+                             onclick="showCourseDetailPopup('${worker.id}', ${cIdx})" 
+                             title="👉 Nhấp để xem chi tiết 3 phần: Video bài giảng, Ôn luyện trắc nghiệm, Kiểm tra">
+                            <span class="c-name">
+                                <span>${c.name}</span>
+                                <span class="c-info-badge">🔍</span>
+                            </span>
                             <span class="c-prog">${c.progress}</span>
                             <span class="c-hours">${c.hours}</span>
                             <span class="c-badge">${c.status}</span>
@@ -459,5 +471,128 @@ document.addEventListener('DOMContentLoaded', () => {
             modal.classList.remove('show');
             document.getElementById('newUsername').value = '';
         };
+    }
+});
+
+// =========================================================================
+//   XỬ LÝ THU GỌN / MỞ RỘNG BẢNG TIẾN ĐỘ & POPUP CHI TIẾT 3 PHẦN MÔN HỌC
+// =========================================================================
+
+function toggleOverviewCollapse(workerId) {
+    if (collapsedOverviewSet.has(workerId)) {
+        collapsedOverviewSet.delete(workerId);
+    } else {
+        collapsedOverviewSet.add(workerId);
+    }
+    const card = document.getElementById(`card_${workerId}`);
+    if (card) {
+        const grid = card.querySelector(`#overview_grid_${workerId}`);
+        const btnText = card.querySelector('.btn-toggle-collapse span');
+        if (grid && btnText) {
+            const isNowCollapsed = collapsedOverviewSet.has(workerId);
+            grid.classList.toggle('is-collapsed', isNowCollapsed);
+            btnText.innerText = isNowCollapsed ? '▼ Mở rộng' : '▲ Thu gọn';
+        }
+    }
+}
+
+function showCourseDetailPopup(workerId, courseIndex) {
+    const worker = workersData.find(w => w.id === workerId);
+    if (!worker || !worker.courseOverview || !worker.courseOverview[courseIndex]) return;
+
+    const course = worker.courseOverview[courseIndex];
+    const modal = document.getElementById('modalCourseDetail');
+    if (!modal) return;
+
+    // 1. Tên môn học & Tổng quan
+    document.getElementById('modalCourseTitle').innerText = course.name;
+    const isPass = course.status === 'Đạt';
+    const summaryBar = document.getElementById('modalCourseSummary');
+    summaryBar.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:2px;">
+            <span style="font-size:11px; color:var(--text-muted);">Trạng thái tổng hợp môn học:</span>
+            <strong style="font-size:14px; color:${isPass ? 'var(--success)' : 'var(--danger)'};">
+                ${isPass ? '🟢 ĐÃ ĐẠT YÊU CẦU' : '🔴 CHƯA ĐẠT CHỈ TIÊU'}
+            </strong>
+        </div>
+        <div style="text-align:right;">
+            <span style="font-size:11px; color:var(--text-muted);">Tổng giờ tích lũy:</span>
+            <strong style="font-size:14px; font-family:var(--font-mono); color:var(--primary);">${course.hours}</strong>
+        </div>
+    `;
+
+    // 2. Tính toán chi tiết 3 phần
+    let numericPct = 0;
+    const pctMatch = course.progress ? course.progress.match(/([\d.]+)%/) : null;
+    if (pctMatch) numericPct = parseFloat(pctMatch[1]) || 0;
+
+    // --- PHẦN 1: VIDEO BÀI GIẢNG ---
+    const vHoursEl = document.getElementById('partVideoHours');
+    const vPctEl = document.getElementById('partVideoPct');
+    const vFillEl = document.getElementById('partVideoFill');
+    const vBadgeEl = document.getElementById('partVideoBadge');
+    const vNoteEl = document.getElementById('partVideoNote');
+
+    vHoursEl.innerText = course.hours;
+    vPctEl.innerText = course.progress;
+    vFillEl.style.width = `${Math.min(numericPct, 100)}%`;
+    vBadgeEl.innerText = isPass ? 'Đạt' : (numericPct > 0 ? 'Đang học' : 'Chưa học');
+    vBadgeEl.className = `part-status-badge ${isPass ? 'pass' : 'fail'}`;
+    vNoteEl.innerText = isPass ? '✓ Đã tích lũy đủ số giờ theo quy chuẩn đào tạo' : '⏳ Cần tiếp tục chạy chế độ xem video để tích lũy đủ giờ';
+
+    // --- PHẦN 2: ÔN LUYỆN TRẮC NGHIỆM ---
+    const pCountEl = document.getElementById('partPracticeCount');
+    const pPctEl = document.getElementById('partPracticePct');
+    const pFillEl = document.getElementById('partPracticeFill');
+    const pBadgeEl = document.getElementById('partPracticeBadge');
+    const pNoteEl = document.getElementById('partPracticeNote');
+
+    let totalQ = 185;
+    const nameLower = course.name.toLowerCase();
+    if (nameLower.includes('phần 3') || nameLower.includes('tình huống')) totalQ = 115;
+    else if (nameLower.includes('phần 1') || nameLower.includes('luật')) totalQ = 166;
+    else if (nameLower.includes('kỹ thuật')) totalQ = 56;
+    else if (nameLower.includes('cấu tạo')) totalQ = 35;
+    else if (nameLower.includes('đạo đức')) totalQ = 44;
+    else if (nameLower.includes('mô phỏng')) totalQ = 120;
+
+    const practicedQ = isPass ? totalQ : Math.round((numericPct / 100) * totalQ);
+    pCountEl.innerText = `${practicedQ} / ${totalQ} câu`;
+    pPctEl.innerText = isPass ? '100%' : `${numericPct}%`;
+    pFillEl.style.width = isPass ? '100%' : `${numericPct}%`;
+    pBadgeEl.innerText = isPass ? 'Đạt' : (practicedQ > 0 ? 'Đang luyện' : 'Chưa làm');
+    pBadgeEl.className = `part-status-badge ${isPass ? 'pass' : 'fail'}`;
+    pNoteEl.innerText = isPass ? `✓ Đã hoàn thành toàn bộ ${totalQ} câu hỏi của phần này` : `👉 Chọn chế độ Ôn luyện trắc nghiệm để hoàn tất bộ ${totalQ} câu`;
+
+    // --- PHẦN 3: KIỂM TRA & ĐÁNH GIÁ ---
+    const eScoreEl = document.getElementById('partExamScore');
+    const eStatusEl = document.getElementById('partExamStatus');
+    const eBadgeEl = document.getElementById('partExamBadge');
+    const eNoteEl = document.getElementById('partExamNote');
+
+    eScoreEl.innerText = isPass ? 'Đạt điểm chuẩn' : 'Chưa hoàn thành';
+    eStatusEl.innerText = isPass ? 'Đủ điều kiện dự thi' : 'Chưa đủ điều kiện';
+    eStatusEl.style.color = isPass ? 'var(--success)' : 'var(--danger)';
+    eBadgeEl.innerText = isPass ? 'Đạt' : 'Chưa đạt';
+    eBadgeEl.className = `part-status-badge ${isPass ? 'pass' : 'fail'}`;
+    eNoteEl.innerText = isPass ? '✓ Đã hoàn thành tất cả các bài kiểm tra đánh giá môn học' : '⏳ Cần hoàn thành đủ giờ video & luyện trắc nghiệm để mở khóa';
+
+    modal.classList.add('show');
+}
+
+function closeCourseDetailModal(event) {
+    if (event && event.target && event.target.id !== 'modalCourseDetail' && !event.target.classList.contains('btn-close') && event.target.tagName !== 'BUTTON') {
+        return;
+    }
+    const modal = document.getElementById('modalCourseDetail');
+    if (modal) modal.classList.remove('show');
+}
+
+// Đóng modal khi nhấn phím Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeCourseDetailModal();
+        const modalAdd = document.getElementById('modalAdd');
+        if (modalAdd) modalAdd.classList.remove('show');
     }
 });
