@@ -423,7 +423,10 @@ class DucthinhBrowser {
                 searchKeywords.push("luyện tập", "luyện tất cả", "luyện thi", "trắc nghiệm", "làm bài", "bắt đầu");
             }
             if (kwLower.includes("bài giảng") || kwLower.includes("video")) {
-                searchKeywords.push("bài giảng điện tử", "học bài", "bài học", "video", "lý thuyết");
+                searchKeywords.push("bài giảng điện tử", "học bài", "bài học", "video", "lý thuyết", "xem giáo trình");
+            }
+            if (kwLower.includes("kiểm tra") || kwLower.includes("thi")) {
+                searchKeywords.push("kiểm tra kết thúc", "bài kiểm tra", "sát hạch", "thi kết thúc môn", "làm bài kiểm tra", "đánh giá");
             }
 
             // 1. Tìm trong các hàng bảng (Table rows)
