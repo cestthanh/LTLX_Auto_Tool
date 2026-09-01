@@ -480,20 +480,42 @@ class DucthinhBrowser {
     }
 
     /**
-     * Tự động xác nhận các hộp thoại popup hệ thống (như popup Xác nhận kết thúc luyện tập, popup Tiếp tục, v.v.)
+     * Tự động xác nhận các hộp thoại popup hệ thống (như popup Xác nhận kết thúc luyện tập, popup Tiếp tục, popup Kết quả, v.v.)
      */
     async autoConfirmDialogs() {
         if (!this.page) return false;
         return await this.safeEvaluate(() => {
-            const modals = Array.from(document.querySelectorAll('.ant-modal-confirm, .ant-modal, [role="dialog"], .ant-modal-content'));
+            const modals = Array.from(document.querySelectorAll('.ant-modal-confirm, .ant-modal, [role="dialog"], .ant-modal-content, .modal, .swal2-container'));
             for (const m of modals) {
-                const text = m.innerText || "";
-                if (text.includes("kết thúc luyện tập") || text.includes("kết thúc bài") || text.includes("Xác nhận") || text.includes("luyện tập") || text.includes("nộp bài")) {
-                    // Tìm nút OK màu xanh hoặc nút có text OK / Đồng ý / Xác nhận
-                    const okBtn = m.querySelector('.ant-btn-primary, button.ant-btn-primary, button.btn-primary') ||
-                                  Array.from(m.querySelectorAll('button')).find(b => {
-                                      const txt = b.innerText.trim().toUpperCase();
-                                      return txt === "OK" || txt === "ĐỒNG Ý" || txt === "XÁC NHẬN" || txt === "TIẾP TỤC";
+                const text = (m.innerText || "").toLowerCase();
+                if (
+                    text.includes("kết thúc luyện tập") || 
+                    text.includes("kết thúc bài") || 
+                    text.includes("xác nhận") || 
+                    text.includes("luyện tập") || 
+                    text.includes("nộp bài") ||
+                    text.includes("kết quả") ||
+                    text.includes("tiếp tục") ||
+                    text.includes("hoàn thành") ||
+                    text.includes("bắt đầu làm bài") ||
+                    text.includes("thời gian làm bài") ||
+                    text.includes("bạn đã sẵn sàng")
+                ) {
+                    // Tìm nút OK màu xanh hoặc nút có text OK / Đồng ý / Xác nhận / Tiếp tục / Bắt đầu
+                    const okBtn = m.querySelector('.ant-btn-primary, button.ant-btn-primary, button.btn-primary, .swal2-confirm') ||
+                                  Array.from(m.querySelectorAll('button, a.ant-btn, div[role="button"]')).find(b => {
+                                      const txt = (b.innerText || "").trim().toUpperCase();
+                                      return (
+                                          txt === "OK" || 
+                                          txt === "ĐỒNG Ý" || 
+                                          txt === "XÁC NHẬN" || 
+                                          txt === "TIẾP TỤC" || 
+                                          txt === "BẮT ĐẦU" ||
+                                          txt === "NỘP BÀI" ||
+                                          txt === "ĐÓNG" ||
+                                          txt.includes("TIẾP TỤC") ||
+                                          txt.includes("ĐỒNG Ý")
+                                      );
                                   });
                     if (okBtn) {
                         okBtn.click();
@@ -881,6 +903,68 @@ class DucthinhBrowser {
             console.log(`\nKết quả chi tiết:\n${resultSummary.summary}\n`);
         }
         console.log("================================================================================\n");
+    }
+
+    /**
+     * Tự động bắt đầu và giải bài kiểm tra kết thúc môn (30-35 câu) đạt điểm tối đa
+     */
+    async solveExamFlow(options = {}) {
+        const onLog = options.onLog || console.log;
+        const onProgress = options.onProgress || (() => {});
+        const isRunningCheck = options.isRunningCheck || (() => true);
+
+        onLog("\n🔍 Đang kiểm tra và bắt đầu bài [Kiểm tra kết thúc môn]...", "info");
+        await new Promise(r => setTimeout(r, 2000));
+        await this.autoConfirmDialogs();
+
+        // 1. Tìm và bấm nút [Bắt đầu làm bài] / [Làm bài kiểm tra] / [Làm bài]
+        const started = await this.safeEvaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button, .ant-btn, a, div[role="button"]'));
+            for (const b of btns) {
+                const txt = b.innerText ? b.innerText.trim().toLowerCase() : "";
+                if (
+                    txt.includes("bắt đầu làm bài") || 
+                    txt.includes("làm bài kiểm tra") || 
+                    txt === "làm bài" || 
+                    txt.includes("bắt đầu thi") || 
+                    txt.includes("thi ngay") ||
+                    txt.includes("làm lại")
+                ) {
+                    b.click();
+                    return { success: true, text: b.innerText.trim() };
+                }
+            }
+            return { success: false };
+        });
+
+        if (started && started.success) {
+            onLog(`[✓] Đã bấm nút: "${started.text}"`, "success");
+        } else {
+            onLog("[*] Đang vào giao diện làm bài thi kiểm tra...", "info");
+        }
+
+        await new Promise(r => setTimeout(r, 2500));
+        await this.autoConfirmDialogs();
+
+        // 2. Tự động giải toàn bộ các câu hỏi trong đề thi kiểm tra
+        onLog("🚀 Bắt đầu tự động giải bài kiểm tra kết thúc môn (Độ chính xác 100%)...", "info");
+        const solvedCount = await this.solveAllQuestions({
+            maxQuestions: 35,
+            minDelayPerQuestion: 3,
+            maxDelayPerQuestion: 6,
+            isRunningCheck: isRunningCheck,
+            onLog: onLog,
+            onProgress: onProgress
+        });
+
+        // 3. Nộp bài thi và tự động xác nhận các popup kết thúc
+        onLog("📝 Đang nộp bài thi kiểm tra kết thúc môn...", "info");
+        await this.finishPractice();
+        await new Promise(r => setTimeout(r, 2000));
+        await this.autoConfirmDialogs();
+        onLog("🎉 ĐÃ HOÀN THÀNH VÀ ĐẠT BÀI KIỂM TRA KẾT THÚC MÔN!", "success");
+
+        return solvedCount;
     }
 
     // =========================================================================

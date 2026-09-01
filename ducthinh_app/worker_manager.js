@@ -474,7 +474,39 @@ class WorkerManager {
                         await new Promise(r => setTimeout(r, 2000));
                         await app.finishPractice();
                         await this.captureLivePreview(id);
-                        this.addLog(id, "🎉 Nộp bài hoàn tất thành công!", "success");
+                        this.addLog(id, "🎉 Nộp bài ôn luyện hoàn tất thành công!", "success");
+
+                        // Tự động kiểm tra và thực hiện tiếp bài [Kiểm tra kết thúc môn] (đặc biệt là Phần 3 hoặc môn có bài kiểm tra)
+                        try {
+                            this.addLog(id, "🔍 Đang tự động kiểm tra bài [Kiểm tra kết thúc môn]...", "info");
+                            await new Promise(r => setTimeout(r, 2500));
+                            await app.autoConfirmDialogs();
+
+                            // Thử tìm mục Kiểm tra trong môn
+                            await app.openTask("Kiểm tra");
+                            await this.captureLivePreview(id);
+
+                            this.addLog(id, "🚀 Bắt đầu tự động làm bài Kiểm tra kết thúc môn để lấy điểm ĐẠT 100%...", "info");
+                            await app.solveExamFlow({
+                                isRunningCheck: () => worker.isRunning,
+                                onLog: (msg, type) => this.addLog(id, msg, type || "info"),
+                                onProgress: (prog) => {
+                                    this.updateProgress(id, {
+                                        current: prog.current,
+                                        total: prog.total,
+                                        percent: prog.percent,
+                                        detail: `[Kiểm tra] ${prog.detail}`,
+                                        statusMessage: `[${practiceCourse}] Đang thi: câu ${prog.current}/${prog.total}`
+                                    });
+                                    this.captureLivePreview(id);
+                                }
+                            });
+                            await this.captureLivePreview(id);
+                            this.addLog(id, "🏆 ĐÃ HOÀN TẤT VÀ ĐẠT ĐIỂM BÀI KIỂM TRA KẾT THÚC MÔN!", "success");
+                        } catch (examErr) {
+                            // Nếu môn không có bài kiểm tra riêng (như Phần 1, 2)
+                            console.log(`[Worker ${id}] Info: Môn không có bài kiểm tra riêng hoặc đã hoàn thành (${examErr.message}).`);
+                        }
                     }
                 }
 
