@@ -147,101 +147,58 @@
         </div>
     </div>
 
-    <!-- MODAL CHI TIẾT 3 PHẦN CỦA KHÓA HỌC (POPUP KHI CLICK MÔN HỌC) -->
+    <!-- MODAL CHI TIẾT MÔN HỌC (TẬP TRUNG SỐ GIỜ TỐI GIẢN) -->
     <div class="modal-backdrop" id="modalCourseDetail" onclick="closeCourseDetailModal(event)">
-        <div class="modal-card course-detail-card" onclick="event.stopPropagation()">
+        <div class="modal-card course-detail-card-compact" onclick="event.stopPropagation()">
             <div class="modal-header">
-                <div class="course-detail-header-info">
-                    <span class="detail-tag">📊 Chi Tiết Thành Phần Môn Học</span>
-                    <h3 id="modalCourseTitle">Tên Môn Học</h3>
-                </div>
+                <h3 id="modalCourseTitle" class="compact-modal-title">Tên Môn Học</h3>
                 <button class="btn-close" onclick="closeCourseDetailModal()">✕</button>
             </div>
+            
             <div class="modal-body">
-                <div class="course-detail-summary-bar" id="modalCourseSummary">
-                    <!-- Trạng thái tổng quan -->
+                <!-- KHỐI CHÍNH: HIỂN THỊ SỐ GIỜ TÍCH LŨY & TIẾN ĐỘ -->
+                <div class="compact-hour-box">
+                    <div class="compact-hour-top">
+                        <div class="compact-hour-left">
+                            <span class="compact-label">THỜI GIAN ĐÃ HỌC</span>
+                            <div class="compact-hour-value" id="compactHours">11.78 / 25 <span class="unit">giờ</span></div>
+                        </div>
+                        <div class="compact-hour-right">
+                            <span class="compact-pct" id="compactPct">47.1%</span>
+                            <span class="compact-badge" id="compactStatus">Chưa đạt</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill" id="compactFill" style="width: 47.1%;"></div>
+                    </div>
                 </div>
 
-                <div class="course-parts-grid">
-                    <!-- PHẦN 1: BÀI GIẢNG ĐIỆN TỬ & VIDEO -->
-                    <div class="part-card" id="partVideoCard">
-                        <div class="part-card-header">
-                            <div class="part-icon">🎬</div>
-                            <div class="part-title-group">
-                                <h4>1. Bài giảng điện tử & Video</h4>
-                                <span class="part-sub">Thời lượng tích lũy bài giảng lý thuyết</span>
-                            </div>
-                            <span class="part-status-badge" id="partVideoBadge">Đạt</span>
-                        </div>
-                        <div class="part-card-body">
-                            <div class="part-metric-row">
-                                <span class="metric-label">Thời gian học:</span>
-                                <strong class="metric-val" id="partVideoHours">14.21 / 20 giờ</strong>
-                            </div>
-                            <div class="part-metric-row">
-                                <span class="metric-label">Tiến độ tích lũy:</span>
-                                <strong class="metric-val text-primary" id="partVideoPct">71.1%</strong>
-                            </div>
-                            <div class="progress-bar-track">
-                                <div class="progress-bar-fill" id="partVideoFill" style="width: 71%;"></div>
-                            </div>
-                            <p class="part-note" id="partVideoNote">✓ Đã tích lũy đủ số giờ theo quy chuẩn đào tạo</p>
-                        </div>
+                <!-- DANH SÁCH 3 MỤC NGẮN GỌN (1 DÒNG / MỤC) -->
+                <div class="compact-parts-list">
+                    <div class="compact-part-row" id="rowPartVideo">
+                        <span class="part-name">🎬 1. Bài giảng & Video</span>
+                        <span class="part-hours" id="subVideoHours">11.78 / 25h</span>
+                        <span class="part-pct" id="subVideoPct">47.1%</span>
+                        <span class="part-status" id="subVideoStatus">Chưa đạt</span>
                     </div>
-
-                    <!-- PHẦN 2: ÔN LUYỆN TRẮC NGHIỆM -->
-                    <div class="part-card" id="partPracticeCard">
-                        <div class="part-card-header">
-                            <div class="part-icon">📝</div>
-                            <div class="part-title-group">
-                                <h4>2. Ôn luyện trắc nghiệm</h4>
-                                <span class="part-sub">Giải ngân hàng câu hỏi & sa hình</span>
-                            </div>
-                            <span class="part-status-badge" id="partPracticeBadge">Đạt</span>
-                        </div>
-                        <div class="part-card-body">
-                            <div class="part-metric-row">
-                                <span class="metric-label">Số câu hoàn thành:</span>
-                                <strong class="metric-val" id="partPracticeCount">185 / 185 câu</strong>
-                            </div>
-                            <div class="part-metric-row">
-                                <span class="metric-label">Tỷ lệ chính xác:</span>
-                                <strong class="metric-val text-success" id="partPracticePct">100%</strong>
-                            </div>
-                            <div class="progress-bar-track">
-                                <div class="progress-bar-fill" id="partPracticeFill" style="width: 100%;"></div>
-                            </div>
-                            <p class="part-note" id="partPracticeNote">✓ Đã luyện tập đạt chuẩn câu hỏi của môn</p>
-                        </div>
+                    <div class="compact-part-row" id="rowPartPractice">
+                        <span class="part-name">📝 2. Ôn luyện trắc nghiệm</span>
+                        <span class="part-hours" id="subPracticeHours">Trắc nghiệm</span>
+                        <span class="part-pct" id="subPracticePct">47.1%</span>
+                        <span class="part-status" id="subPracticeStatus">Chưa đạt</span>
                     </div>
-
-                    <!-- PHẦN 3: KIỂM TRA & ĐÁNH GIÁ KẾT THÚC MÔN -->
-                    <div class="part-card" id="partExamCard">
-                        <div class="part-card-header">
-                            <div class="part-icon">🏆</div>
-                            <div class="part-title-group">
-                                <h4>3. Kiểm tra kết thúc môn</h4>
-                                <span class="part-sub">Bài thi đánh giá điều kiện tốt nghiệp</span>
-                            </div>
-                            <span class="part-status-badge" id="partExamBadge">Đạt</span>
-                        </div>
-                        <div class="part-card-body">
-                            <div class="part-metric-row">
-                                <span class="metric-label">Kết quả sát hạch:</span>
-                                <strong class="metric-val" id="partExamScore">Đạt yêu cầu</strong>
-                            </div>
-                            <div class="part-metric-row">
-                                <span class="metric-label">Điều kiện môn:</span>
-                                <strong class="metric-val text-success" id="partExamStatus">Đủ điều kiện</strong>
-                            </div>
-                            <p class="part-note" id="partExamNote">✓ Đã hoàn thành đánh giá môn học</p>
-                        </div>
+                    <div class="compact-part-row" id="rowPartExam">
+                        <span class="part-name">🏆 3. Kiểm tra kết thúc môn</span>
+                        <span class="part-hours" id="subExamHours">Đánh giá</span>
+                        <span class="part-pct" id="subExamPct">-</span>
+                        <span class="part-status" id="subExamStatus">Chưa đạt</span>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <span class="modal-hint">💡 Nhấp ra ngoài vùng hộp thoại hoặc phím Esc để đóng</span>
-                <button class="btn btn-secondary" onclick="closeCourseDetailModal()">Đóng</button>
+
+            <div class="modal-footer compact-footer">
+                <span class="modal-hint">💡 Nhấp ra ngoài để đóng</span>
+                <button class="btn btn-secondary btn-sm" onclick="closeCourseDetailModal()">Đóng</button>
             </div>
         </div>
     </div>
