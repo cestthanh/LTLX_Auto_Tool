@@ -422,6 +422,32 @@ class DucthinhBrowser {
     }
 
     /**
+     * Tự động xác nhận các hộp thoại popup hệ thống (như popup Xác nhận kết thúc luyện tập, popup Tiếp tục, v.v.)
+     */
+    async autoConfirmDialogs() {
+        if (!this.page) return false;
+        return await this.safeEvaluate(() => {
+            const modals = Array.from(document.querySelectorAll('.ant-modal-confirm, .ant-modal, [role="dialog"], .ant-modal-content'));
+            for (const m of modals) {
+                const text = m.innerText || "";
+                if (text.includes("kết thúc luyện tập") || text.includes("kết thúc bài") || text.includes("Xác nhận") || text.includes("luyện tập") || text.includes("nộp bài")) {
+                    // Tìm nút OK màu xanh hoặc nút có text OK / Đồng ý / Xác nhận
+                    const okBtn = m.querySelector('.ant-btn-primary, button.ant-btn-primary, button.btn-primary') ||
+                                  Array.from(m.querySelectorAll('button')).find(b => {
+                                      const txt = b.innerText.trim().toUpperCase();
+                                      return txt === "OK" || txt === "ĐỒNG Ý" || txt === "XÁC NHẬN" || txt === "TIẾP TỤC";
+                                  });
+                    if (okBtn) {
+                        okBtn.click();
+                        return { confirmed: true, text: okBtn.innerText.trim() };
+                    }
+                }
+            }
+            return { confirmed: false };
+        });
+    }
+
+    /**
      * Bấm nút "Luyện tất cả"
      */
     async startPracticeAll() {
@@ -429,6 +455,7 @@ class DucthinhBrowser {
 
         console.log("[*] Đang tìm và bấm nút [Luyện tất cả]...");
         await new Promise(r => setTimeout(r, 2000));
+        await this.autoConfirmDialogs();
 
         const clicked = await this.safeEvaluate(() => {
             const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
@@ -442,11 +469,15 @@ class DucthinhBrowser {
         });
 
         if (!clicked || !clicked.success) {
-            throw new Error("Không tìm thấy nút [Luyện tất cả] trên màn hình.");
+            console.log("[*] Thử kiểm tra nút bắt đầu luyện tập khác hoặc xác nhận popup...");
+            await this.autoConfirmDialogs();
+        } else {
+            console.log(`[✓] Đã bấm: "${clicked.text}"`);
         }
 
-        console.log(`[✓] Đã bấm: "${clicked.text}"`);
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 3000));
+        await this.autoConfirmDialogs();
+        await new Promise(r => setTimeout(r, 1000));
     }
 
     /**
@@ -473,6 +504,9 @@ class DucthinhBrowser {
             if (!isRunningCheck()) break;
 
             await new Promise(r => setTimeout(r, 600));
+
+            // Tự động đóng/xác nhận các popup hệ thống nếu có
+            await this.autoConfirmDialogs();
 
             // Kiểm tra và tạm dừng nếu có Captcha / Xác minh người thật
             await this.handleHumanVerificationIfNeeded();
