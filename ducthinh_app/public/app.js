@@ -596,3 +596,8 @@ document.addEventListener('keydown', (e) => {
         if (modalAdd) modalAdd.classList.remove('show');
     }
 });
+
+// Gán tường minh vào window cho inline onclick
+window.toggleOverviewCollapse = toggleOverviewCollapse;
+window.showCourseDetailPopup = showCourseDetailPopup;
+window.closeCourseDetailModal = closeCourseDetailModal;
