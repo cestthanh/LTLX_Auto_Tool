@@ -176,44 +176,57 @@ class WorkerManager {
 
         this.addLog(id, `🔍 Bắt đầu quét tiến độ cho tài khoản: ${worker.username}...`);
 
-        let app = null;
-        try {
-            app = new DucthinhBrowser({
-                account: {
-                    username: worker.username.trim(),
-                    password: worker.password.trim()
-                },
-                browser: {
-                    headless: "new" // Luôn quét ngầm nhanh chóng
+        let lastErr = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            let app = null;
+            try {
+                if (attempt > 1) {
+                    this.addLog(id, `🔄 Đang thử lại lượt ${attempt} kết nối máy chủ...`, "warning");
+                    await new Promise(r => setTimeout(r, 2000));
                 }
-            });
 
-            await app.login(worker.username, worker.password);
-            this.addLog(id, "Đăng nhập thành công! Đang lấy bảng tiến độ 6 môn học...", "info");
+                app = new DucthinhBrowser({
+                    account: {
+                        username: worker.username.trim(),
+                        password: worker.password.trim()
+                    },
+                    browser: {
+                        headless: "new" // Luôn quét ngầm nhanh chóng
+                    }
+                });
 
-            const overview = await app.getCourseProgressOverview();
-            worker.courseOverview = overview;
-            worker.step = "SCANNED";
-            worker.status = "IDLE";
-            worker.statusMessage = `Đã quét xong: Tìm thấy ${overview.length} môn học!`;
+                await app.login(worker.username, worker.password);
+                this.addLog(id, "Đăng nhập thành công! Đang lấy bảng tiến độ 6 môn học...", "info");
 
-            this.addLog(id, `[✓] Quét hoàn tất! Đã cập nhật trạng thái chi tiết của tất cả các môn.`, "success");
-            await app.close();
+                const overview = await app.getCourseProgressOverview();
+                worker.courseOverview = overview;
+                worker.step = "SCANNED";
+                worker.status = "IDLE";
+                worker.statusMessage = `Đã quét xong: Tìm thấy ${overview.length} môn học!`;
 
-        } catch (err) {
-            console.error(`[Worker ${id} Scan Error]:`, err);
+                this.addLog(id, `[✓] Quét hoàn tất! Đã cập nhật trạng thái chi tiết của tất cả các môn.`, "success");
+                await app.close();
+                lastErr = null;
+                break;
+
+            } catch (err) {
+                lastErr = err;
+                if (app) try { await app.close(); } catch(e) {}
+            }
+        }
+
+        if (lastErr) {
+            console.error(`[Worker ${id} Scan Error]:`, lastErr);
             worker.status = "ERROR";
-            worker.statusMessage = `Lỗi quét tiến độ: ${err.message}`;
+            worker.statusMessage = `Lỗi quét tiến độ: ${lastErr.message}`;
             this.setAlert(id, {
                 type: "ERROR",
-                message: `Quét thất bại: ${err.message}`,
+                message: `Quét thất bại: ${lastErr.message}`,
                 time: new Date().toLocaleTimeString("vi-VN")
             });
-            this.addLog(id, `❌ Lỗi quét: ${err.message}`, "error");
-            if (app) try { await app.close(); } catch(e) {}
-        } finally {
-            this.notifyState();
+            this.addLog(id, `❌ Lỗi quét: ${lastErr.message}`, "error");
         }
+        this.notifyState();
     }
 
     /**

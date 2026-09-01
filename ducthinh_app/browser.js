@@ -188,43 +188,81 @@ class DucthinhBrowser {
     }
 
     /**
-     * Đăng nhập vào hệ thống
+     * Đăng nhập vào hệ thống (Chống kẹt session, hỗ trợ nhận diện tự động khi đã đăng nhập)
      */
     async login(username = this.config.account.username, password = this.config.account.password) {
         if (!this.page) await this.launch();
+
+        // 1. Kiểm tra nếu URL hiện tại đã ở trang sinh viên / Dashboard
+        let currentUrl = this.page.url();
+        if (currentUrl.includes("/student") || currentUrl.includes("/ep") || currentUrl.includes("/learn")) {
+            console.log(`[✓] Đã ở phiên đăng nhập sẵn! URL: ${currentUrl}`);
+            return currentUrl;
+        }
 
         const loginUrl = `${this.config.baseUrl}/user/login`;
         console.log(`[*] Đang truy cập ${loginUrl}...`);
         
         try {
             await this.page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-        } catch (e) {
-            // LotusLMS tải hơn 120 file JS chunks ngầm nên sự kiện domcontentloaded có thể bị trễ,
-            // ta chỉ cần đợi form đăng nhập xuất hiện trong DOM là tiếp tục ngay!
+        } catch (e) {}
+
+        // Kiểm tra xem trang có tự động chuyển vào dashboard luôn không
+        await new Promise(r => setTimeout(r, 1000));
+        currentUrl = this.page.url();
+        if (currentUrl.includes("/student") || currentUrl.includes("/ep") || currentUrl.includes("/learn")) {
+            console.log(`[✓] Hệ thống tự động chuyển vào Dashboard! URL: ${currentUrl}`);
+            return currentUrl;
+        }
+
+        // 2. Chờ song song cả Form đăng nhập HOẶC Bảng Dashboard
+        const targetElement = await Promise.race([
+            this.page.waitForSelector('input[name="lname"], input[name="username"], input[type="text"], input#username', { timeout: 20000 }).then(() => 'form'),
+            this.page.waitForSelector('table, .ant-table, [class*="student"]', { timeout: 20000 }).then(() => 'dashboard')
+        ]).catch(() => null);
+
+        if (targetElement === 'dashboard' || this.page.url().includes('/student')) {
+            console.log(`[✓] Nhận diện đã đăng nhập thành công!`);
+            return this.page.url();
         }
 
         console.log(`[*] Nhập tài khoản: ${username}`);
-        await this.page.waitForSelector('input[name="lname"], input[type="text"]', { timeout: 30000 });
-        
-        const userInput = await this.page.$('input[name="lname"], input[type="text"]');
-        await userInput.type(username, { delay: 40 });
-
-        const passInput = await this.page.$('input[type="password"]');
-        await passInput.type(password, { delay: 40 });
-
-        console.log("[*] Bấm Đăng nhập...");
-        const btn = await this.page.$('button.btn-login, button[type="submit"]');
-        await btn.click();
-
-        await new Promise(r => setTimeout(r, 4000));
-
-        const currentUrl = this.page.url();
-        if (currentUrl.includes("/user/login")) {
-            throw new Error("Đăng nhập không thành công hoặc bị trả về trang login.");
+        const userInput = await this.page.$('input[name="lname"], input[name="username"], input[type="text"], input#username');
+        if (!userInput) {
+            throw new Error("Không tìm thấy ô nhập tài khoản trên trang đăng nhập.");
         }
 
-        console.log(`[✓] ĐÃ ĐĂNG NHẬP THÀNH CÔNG!`);
-        console.log(`[*] URL Dashboard: ${currentUrl}`);
+        // Xóa sạch dữ liệu cũ và gõ tài khoản
+        await userInput.click({ clickCount: 3 });
+        await userInput.type(username, { delay: 35 });
+
+        const passInput = await this.page.$('input[type="password"]');
+        if (passInput) {
+            await passInput.click({ clickCount: 3 });
+            await passInput.type(password, { delay: 35 });
+        }
+
+        console.log("[*] Bấm Đăng nhập...");
+        const btn = await this.page.$('button.btn-login, button[type="submit"], button.ant-btn-primary');
+        if (btn) {
+            await btn.click();
+        }
+
+        // Đợi chuyển trang đăng nhập thành công
+        for (let i = 0; i < 15; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            currentUrl = this.page.url();
+            if (!currentUrl.includes("/user/login") || currentUrl.includes("/student")) {
+                break;
+            }
+        }
+
+        currentUrl = this.page.url();
+        if (currentUrl.includes("/user/login")) {
+            throw new Error("Đăng nhập không thành công (Vui lòng kiểm tra lại số CCCD/Mật khẩu hoặc thử lại sau giây lát).");
+        }
+
+        console.log(`[✓] ĐÃ ĐĂNG NHẬP THÀNH CÔNG! URL: ${currentUrl}`);
         return currentUrl;
     }
 
