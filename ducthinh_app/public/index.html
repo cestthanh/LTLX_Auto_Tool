@@ -147,7 +147,7 @@
         </div>
     </div>
 
-    <!-- MODAL CHI TIẾT MÔN HỌC (TẬP TRUNG SỐ GIỜ TỐI GIẢN) -->
+    <!-- MODAL CHI TIẾT MÔN HỌC (ĐIỂM THÀNH PHẦN CHI TIẾT - CHUẨN LOTUSLMS) -->
     <div class="modal-backdrop" id="modalCourseDetail" onclick="closeCourseDetailModal(event)">
         <div class="modal-card course-detail-card-compact" onclick="event.stopPropagation()">
             <div class="modal-header">
@@ -156,12 +156,12 @@
             </div>
             
             <div class="modal-body">
-                <!-- KHỐI CHÍNH: HIỂN THỊ SỐ GIỜ TÍCH LŨY & TIẾN ĐỘ -->
+                <!-- KHỐI TIẾN ĐỘ CHUNG THEO THỜI GIAN -->
                 <div class="compact-hour-box">
                     <div class="compact-hour-top">
                         <div class="compact-hour-left">
-                            <span class="compact-label">THỜI GIAN ĐÃ HỌC</span>
-                            <div class="compact-hour-value" id="compactHours">11.78 / 25 <span class="unit">giờ</span></div>
+                            <span class="compact-label">TIẾN ĐỘ (TÍNH THEO THỜI GIAN)</span>
+                            <div class="compact-hour-value" id="compactHours">11.78/25 <span class="unit">giờ</span></div>
                         </div>
                         <div class="compact-hour-right">
                             <span class="compact-pct" id="compactPct">47.1%</span>
@@ -173,26 +173,35 @@
                     </div>
                 </div>
 
-                <!-- DANH SÁCH 3 MỤC NGẮN GỌN (1 DÒNG / MỤC) -->
-                <div class="compact-parts-list">
-                    <div class="compact-part-row" id="rowPartVideo">
-                        <span class="part-name">🎬 1. Bài giảng & Video</span>
-                        <span class="part-hours" id="subVideoHours">11.78 / 25h</span>
-                        <span class="part-pct" id="subVideoPct">47.1%</span>
-                        <span class="part-status" id="subVideoStatus">Chưa đạt</span>
-                    </div>
-                    <div class="compact-part-row" id="rowPartPractice">
-                        <span class="part-name">📝 2. Ôn luyện trắc nghiệm</span>
-                        <span class="part-hours" id="subPracticeHours">Trắc nghiệm</span>
-                        <span class="part-pct" id="subPracticePct">47.1%</span>
-                        <span class="part-status" id="subPracticeStatus">Chưa đạt</span>
-                    </div>
-                    <div class="compact-part-row" id="rowPartExam">
-                        <span class="part-name">🏆 3. Kiểm tra kết thúc môn</span>
-                        <span class="part-hours" id="subExamHours">Đánh giá</span>
-                        <span class="part-pct" id="subExamPct">-</span>
-                        <span class="part-status" id="subExamStatus">Chưa đạt</span>
-                    </div>
+                <!-- BẢNG ĐIỂM THÀNH PHẦN CHI TIẾT -->
+                <div class="detail-table-wrapper">
+                    <div class="detail-table-title">Điểm thành phần chi tiết</div>
+                    <table class="detail-custom-table">
+                        <thead>
+                            <tr>
+                                <th>Tên nhiệm vụ</th>
+                                <th style="text-align: right;">Số giờ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="task-title">Xem giáo trình</td>
+                                <td class="task-hours" id="dt_giaoTrinh">0/10</td>
+                            </tr>
+                            <tr>
+                                <td class="task-title">Ôn luyện</td>
+                                <td class="task-hours highlight-hours" id="dt_onLuyen">11.78/14</td>
+                            </tr>
+                            <tr>
+                                <td class="task-title">Kiểm tra</td>
+                                <td class="task-hours" id="dt_kiemTra">0/1</td>
+                            </tr>
+                            <tr>
+                                <td class="task-title">Điểm kiểm tra</td>
+                                <td class="task-hours" id="dt_diemKT">0/5</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

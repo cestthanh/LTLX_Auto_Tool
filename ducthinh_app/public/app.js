@@ -509,38 +509,63 @@ function showCourseDetailPopup(workerId, courseIndex) {
     const pctMatch = course.progress ? course.progress.match(/([\d.]+)%/) : null;
     if (pctMatch) numericPct = parseFloat(pctMatch[1]) || 0;
 
-    // 1. Tên môn học
+    // 1. Tiêu đề môn học
     document.getElementById('modalCourseTitle').innerText = course.name;
 
-    // 2. Khối chính: Số giờ & Tiến độ
+    // 2. Khối tổng quan: Số giờ & Tiến độ
     document.getElementById('compactHours').innerHTML = `${course.hours} <span class="unit">giờ</span>`;
     document.getElementById('compactPct').innerText = course.progress || '0%';
     const statusEl = document.getElementById('compactStatus');
-    statusEl.innerText = isPass ? 'Đạt' : 'Chưa đạt';
+    statusEl.innerText = isPass ? '✓ Đạt' : '✕ Chưa đạt';
     statusEl.className = `compact-badge ${isPass ? 'pass' : 'fail'}`;
     document.getElementById('compactFill').style.width = `${Math.min(numericPct, 100)}%`;
 
-    // 3. Danh sách 3 mục ngắn gọn (Tập trung số giờ)
-    // Mục 1: Video & Lý thuyết
-    document.getElementById('subVideoHours').innerText = course.hours;
-    document.getElementById('subVideoPct').innerText = course.progress || '0%';
-    const svStatus = document.getElementById('subVideoStatus');
-    svStatus.innerText = isPass ? 'Đạt' : 'Chưa đạt';
-    svStatus.className = `part-status ${isPass ? 'pass' : 'fail'}`;
+    // 3. Phân bổ điểm thành phần chi tiết (Xem giáo trình / Ôn luyện / Kiểm tra)
+    const nameLower = course.name.toLowerCase();
+    let gTrinhMax = 10, onLuyenMax = 14, kTraMax = 1, diemKTMax = 5;
 
-    // Mục 2: Ôn luyện trắc nghiệm
-    document.getElementById('subPracticeHours').innerText = isPass ? 'Đã hoàn thành' : 'Đang học';
-    document.getElementById('subPracticePct').innerText = isPass ? '100%' : (course.progress || '0%');
-    const spStatus = document.getElementById('subPracticeStatus');
-    spStatus.innerText = isPass ? 'Đạt' : 'Chưa đạt';
-    spStatus.className = `part-status ${isPass ? 'pass' : 'fail'}`;
+    if (nameLower.includes('phần 2') || nameLower.includes('báo hiệu')) {
+        gTrinhMax = 15; onLuyenMax = 24; kTraMax = 1; diemKTMax = 5;
+    } else if (nameLower.includes('phần 1') || nameLower.includes('phần 3') || nameLower.includes('tình huống') || nameLower.includes('luật')) {
+        gTrinhMax = 10; onLuyenMax = 14; kTraMax = 1; diemKTMax = 5;
+    } else if (nameLower.includes('kỹ thuật')) {
+        gTrinhMax = 10; onLuyenMax = 9; kTraMax = 1; diemKTMax = 5;
+    } else if (nameLower.includes('đạo đức')) {
+        gTrinhMax = 10; onLuyenMax = 9; kTraMax = 1; diemKTMax = 5;
+    } else if (nameLower.includes('cấu tạo')) {
+        gTrinhMax = 4; onLuyenMax = 3; kTraMax = 1; diemKTMax = 5;
+    } else if (nameLower.includes('mô phỏng')) {
+        gTrinhMax = 10; onLuyenMax = 10; kTraMax = 1; diemKTMax = 5;
+    }
 
-    // Mục 3: Kiểm tra kết thúc môn
-    document.getElementById('subExamHours').innerText = isPass ? 'Đạt chuẩn' : 'Chưa làm';
-    document.getElementById('subExamPct').innerText = isPass ? '100%' : '-';
-    const seStatus = document.getElementById('subExamStatus');
-    seStatus.innerText = isPass ? 'Đạt' : 'Chưa đạt';
-    seStatus.className = `part-status ${isPass ? 'pass' : 'fail'}`;
+    // Tính toán số giờ thực tế đã học
+    let earnedHours = 0;
+    const hourMatch = course.hours ? course.hours.match(/([\d.]+)\s*\//) : null;
+    if (hourMatch) earnedHours = parseFloat(hourMatch[1]) || 0;
+
+    let gTrinhVal = "0", onLuyenVal = "0", kTraVal = "0", diemKTVal = "0";
+
+    if (isPass) {
+        gTrinhVal = `${gTrinhMax}`;
+        onLuyenVal = `${onLuyenMax}`;
+        kTraVal = `${kTraMax}`;
+        diemKTVal = `${diemKTMax}`;
+    } else if (earnedHours > 0) {
+        // Hệ thống LotusLMS ưu tiên cộng giờ vào Ôn luyện trước (hoặc Giáo trình)
+        const onLuyenActual = Math.min(earnedHours, onLuyenMax);
+        const remainHours = Math.max(0, earnedHours - onLuyenMax);
+        const gTrinhActual = Math.min(remainHours, gTrinhMax);
+
+        onLuyenVal = `${onLuyenActual}`;
+        gTrinhVal = `${gTrinhActual}`;
+        kTraVal = "0";
+        diemKTVal = "0";
+    }
+
+    document.getElementById('dt_giaoTrinh').innerText = `${gTrinhVal}/${gTrinhMax}`;
+    document.getElementById('dt_onLuyen').innerText = `${onLuyenVal}/${onLuyenMax}`;
+    document.getElementById('dt_kiemTra').innerText = `${kTraVal}/${kTraMax}`;
+    document.getElementById('dt_diemKT').innerText = `${diemKTVal}/${diemKTMax}`;
 
     modal.classList.add('show');
 }
