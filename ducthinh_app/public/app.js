@@ -520,29 +520,63 @@ function showCourseDetailPopup(workerId, courseIndex) {
     statusEl.className = `compact-badge ${isPass ? 'pass' : 'fail'}`;
     document.getElementById('compactFill').style.width = `${Math.min(numericPct, 100)}%`;
 
-    // 3. Phân bổ điểm thành phần chi tiết (Xem giáo trình / Ôn luyện / Kiểm tra)
+    // 3. Lấy số giờ đã học và số giờ yêu cầu thực tế của môn này
+    let earnedHours = 0;
+    let requiredHours = 0;
+    const hourMatch = course.hours ? course.hours.match(/([\d.]+)\s*\/\s*([\d.]+)/) : null;
+    if (hourMatch) {
+        earnedHours = parseFloat(hourMatch[1]) || 0;
+        requiredHours = parseFloat(hourMatch[2]) || 0;
+    }
+
+    // 4. Phân bổ chính xác ngưỡng số giờ cho từng môn học theo khung đào tạo LotusLMS
     const nameLower = course.name.toLowerCase();
     let gTrinhMax = 10, onLuyenMax = 14, kTraMax = 1, diemKTMax = 5;
 
-    if (nameLower.includes('phần 2') || nameLower.includes('báo hiệu')) {
-        gTrinhMax = 15; onLuyenMax = 24; kTraMax = 1; diemKTMax = 5;
-    } else if (nameLower.includes('phần 1') || nameLower.includes('phần 3') || nameLower.includes('tình huống') || nameLower.includes('luật')) {
-        gTrinhMax = 10; onLuyenMax = 14; kTraMax = 1; diemKTMax = 5;
-    } else if (nameLower.includes('kỹ thuật')) {
-        gTrinhMax = 10; onLuyenMax = 9; kTraMax = 1; diemKTMax = 5;
-    } else if (nameLower.includes('đạo đức')) {
-        gTrinhMax = 10; onLuyenMax = 9; kTraMax = 1; diemKTMax = 5;
-    } else if (nameLower.includes('cấu tạo')) {
-        gTrinhMax = 4; onLuyenMax = 3; kTraMax = 1; diemKTMax = 5;
-    } else if (nameLower.includes('mô phỏng')) {
-        gTrinhMax = 10; onLuyenMax = 10; kTraMax = 1; diemKTMax = 5;
+    if (requiredHours === 40 || nameLower.includes('phần 2') || nameLower.includes('báo hiệu')) {
+        // Phần 2: Tổng 40h = 12h Giáo trình + 27h Ôn luyện + 1h Kiểm tra
+        gTrinhMax = 12; 
+        onLuyenMax = 27; 
+        kTraMax = 1; 
+        diemKTMax = 5;
+    } else if (requiredHours === 25 || nameLower.includes('phần 1') || nameLower.includes('phần 3') || nameLower.includes('tình huống') || nameLower.includes('luật')) {
+        // Phần 1 & Phần 3: Tổng 25h = 10h Giáo trình + 14h Ôn luyện + 1h Kiểm tra
+        gTrinhMax = 10; 
+        onLuyenMax = 14; 
+        kTraMax = 1; 
+        diemKTMax = 5;
+    } else if (requiredHours === 20 || nameLower.includes('kỹ thuật')) {
+        // Kỹ thuật lái xe: Tổng 20h = 10h Giáo trình + 9h Ôn luyện + 1h Kiểm tra
+        gTrinhMax = 10; 
+        onLuyenMax = 9; 
+        kTraMax = 1; 
+        diemKTMax = 5;
+    } else if (requiredHours === 14 || (nameLower.includes('đạo đức') && requiredHours < 20)) {
+        // Đạo đức (khung 14h): Tổng 14h = 8h Giáo trình + 5h Ôn luyện + 1h Kiểm tra
+        gTrinhMax = 8; 
+        onLuyenMax = 5; 
+        kTraMax = 1; 
+        diemKTMax = 5;
+    } else if (requiredHours === 8 || nameLower.includes('cấu tạo')) {
+        // Cấu tạo sửa chữa: Tổng 8h = 4h Giáo trình + 3h Ôn luyện + 1h Kiểm tra
+        gTrinhMax = 4; 
+        onLuyenMax = 3; 
+        kTraMax = 1; 
+        diemKTMax = 5;
+    } else if (requiredHours === 90 || nameLower.includes('pháp luật')) {
+        // Nhóm cha Pháp luật (Tổng 90h = 32h Giáo trình + 55h Ôn luyện + 3h Kiểm tra)
+        gTrinhMax = 32; 
+        onLuyenMax = 55; 
+        kTraMax = 3; 
+        diemKTMax = 15;
+    } else if (requiredHours > 0) {
+        kTraMax = 1;
+        onLuyenMax = Math.round((requiredHours - 1) * 0.6);
+        gTrinhMax = requiredHours - 1 - onLuyenMax;
+        diemKTMax = 5;
     }
 
-    // Tính toán số giờ thực tế đã học
-    let earnedHours = 0;
-    const hourMatch = course.hours ? course.hours.match(/([\d.]+)\s*\//) : null;
-    if (hourMatch) earnedHours = parseFloat(hourMatch[1]) || 0;
-
+    // 5. Điền số giờ đã học cho từng phần
     let gTrinhVal = "0", onLuyenVal = "0", kTraVal = "0", diemKTVal = "0";
 
     if (isPass) {
@@ -551,9 +585,8 @@ function showCourseDetailPopup(workerId, courseIndex) {
         kTraVal = `${kTraMax}`;
         diemKTVal = `${diemKTMax}`;
     } else if (earnedHours > 0) {
-        // Hệ thống LotusLMS ưu tiên cộng giờ vào Ôn luyện trước (hoặc Giáo trình)
         const onLuyenActual = Math.min(earnedHours, onLuyenMax);
-        const remainHours = Math.max(0, earnedHours - onLuyenMax);
+        const remainHours = Math.max(0, +(earnedHours - onLuyenMax).toFixed(2));
         const gTrinhActual = Math.min(remainHours, gTrinhMax);
 
         onLuyenVal = `${onLuyenActual}`;
