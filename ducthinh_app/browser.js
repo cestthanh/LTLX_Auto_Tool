@@ -1,5 +1,6 @@
 const puppeteer = require("puppeteer");
 const config = require("./config");
+const { QuestionBankEngine } = require("./question_bank_engine");
 
 class DucthinhBrowser {
     constructor(options = {}) {
@@ -13,7 +14,8 @@ class DucthinhBrowser {
         };
         this.browser = null;
         this.page = null;
-        this.questionBank = new Map(); // Bộ nhớ lưu trữ đáp án đúng 100%
+        this.engine = new QuestionBankEngine(); // Engine giải câu hỏi thông minh 100%
+        this.questionBank = this.engine.bankById; // Tương thích ngược
     }
 
     /**
@@ -87,33 +89,17 @@ class DucthinhBrowser {
 
         // 2. Tự động bắt gói tin nạp ngân hàng câu hỏi để lấy đáp án đúng 100%
         this.page.on("response", async (res) => {
-            const url = res.url();
-            if (url.includes("get-question-bank-status") || url.includes("get-practice-questions") || url.includes("get_exercise_detail")) {
-                try {
+            try {
+                const url = res.url().toLowerCase();
+                const contentType = res.headers()["content-type"] || "";
+                if (contentType.includes("json") || url.includes("question") || url.includes("exercise") || url.includes("exam") || url.includes("bank") || url.includes("status")) {
                     const json = await res.json();
-                    const qList = json?.result?.questions?.result || json?.result?.questions || [];
-                    if (Array.isArray(qList) && qList.length > 0) {
-                        for (const q of qList) {
-                            const correctIndices = [];
-                            if (Array.isArray(q.mc_answers)) {
-                                q.mc_answers.forEach((ans, idx) => {
-                                    if (ans.is_answer === 1) correctIndices.push(idx);
-                                });
-                            }
-                            if (correctIndices.length === 0 && Array.isArray(q.answers)) {
-                                correctIndices.push(...q.answers);
-                            }
-                            this.questionBank.set(q.id, {
-                                id: q.id,
-                                content: q.content,
-                                correctIndices: correctIndices.length > 0 ? correctIndices : [0],
-                                mc_answers: q.mc_answers || []
-                            });
-                        }
-                        console.log(`[✓] ĐÃ NẠP TỰ ĐỘNG ${this.questionBank.size} CÂU HỎI VÀ ĐÁP ÁN CHUẨN 100% VÀO BỘ NHỚ!`);
+                    const count = this.engine.feedQuestionsFromJSON(json);
+                    if (count > 0) {
+                        console.log(`[✓] ĐÃ NẠP TỰ ĐỘNG ${count} CÂU HỎI & ĐÁP ÁN CHUẨN TỪ MÁY CHỦ VÀO ENGINE (Tổng: ${this.engine.bankById.size} câu)!`);
                     }
-                } catch (e) {}
-            }
+                }
+            } catch (e) {}
         });
 
         return this.page;
@@ -559,21 +545,39 @@ class DucthinhBrowser {
                 break;
             }
 
-            // Lấy thông tin câu hỏi hiện tại
+            // Lấy thông tin câu hỏi và toàn bộ danh sách lựa chọn trên DOM
             const qInfo = await this.safeEvaluate(() => {
                 const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
-                const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
-                const title = document.querySelector('.question-content, .question-title, h4, h3, .content')?.innerText?.trim() || "";
+                const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper, .ant-checkbox-wrapper, .radio-option, [class*="option-item"]'));
+                const titleEl = document.querySelector('.question-content, .question-title, .title-question, h4, h3, .content');
+                const title = titleEl ? titleEl.innerText.trim() : "";
 
                 let qId = null;
                 if (inputs.length > 0 && inputs[0].id) {
                     qId = inputs[0].id.split('-')[0];
                 }
 
+                const options = [];
+                for (let i = 0; i < labels.length; i++) {
+                    const lbl = labels[i];
+                    const text = lbl.innerText ? lbl.innerText.trim() : "";
+                    const forAttr = lbl.getAttribute('for') || "";
+                    const input = lbl.querySelector('input') || (forAttr ? document.getElementById(forAttr) : inputs[i]);
+                    const id = input ? input.id : (forAttr || `opt-${i}`);
+                    options.push({
+                        index: i,
+                        id: id,
+                        forAttr: forAttr,
+                        text: text.replace(/^[0-9A-D\.\-\s]+/, '').trim(), // Bỏ prefix "1 - ", "A. "
+                        fullText: text
+                    });
+                }
+
                 return {
                     qId,
-                    title: title.slice(0, 80),
-                    optionsCount: labels.length || inputs.length
+                    title: title.slice(0, 100),
+                    options,
+                    optionsCount: options.length || labels.length || inputs.length
                 };
             });
 
@@ -585,17 +589,12 @@ class DucthinhBrowser {
 
             completedCount = headerProgress ? headerProgress.current : (completedCount + 1);
 
-            // Tìm đáp án đúng từ ngân hàng câu hỏi chuẩn
-            let targetIndex = 0;
-            let ansText = "Phương án 1";
-            if (qInfo.qId && this.questionBank.has(qInfo.qId)) {
-                const bankItem = this.questionBank.get(qInfo.qId);
-                targetIndex = bankItem.correctIndices[0] || 0;
-                ansText = bankItem.mc_answers?.[targetIndex]?.text || `Phương án ${targetIndex + 1}`;
-                onLog(`[Câu ${completedCount}/${dynamicTotal}] 🎯 Đáp án đúng: "${ansText}"`, "info");
-            } else {
-                onLog(`[Câu ${completedCount}/${dynamicTotal}] ℹ️ Chọn phương án 1`, "info");
-            }
+            // Tìm đáp án đúng tối ưu 100% bằng QuestionBankEngine
+            const answerDecision = this.engine.findBestAnswer(qInfo);
+            const targetIndex = answerDecision.targetIndex || 0;
+            const ansText = answerDecision.matchedText || `Phương án ${targetIndex + 1}`;
+            
+            onLog(`[Câu ${completedCount}/${dynamicTotal}] 🎯 [${answerDecision.strategy}] Đáp án đúng: "${ansText}"`, "info");
 
             const pct = Math.round((completedCount / dynamicTotal) * 100);
             onProgress({
@@ -618,19 +617,21 @@ class DucthinhBrowser {
 
             await this.handleHumanVerificationIfNeeded();
 
-            // 3. DI CHUỘT THEO ĐƯỜNG CONG TỰ NHIÊN VÀ CLICK ĐÁP ÁN
+            // 3. DI CHUỘT VÀ CLICK CHÍNH XÁC VÀO ĐÁP ÁN ĐÃ CHỌN
             let clickSuccess = false;
-            if (qInfo.qId) {
-                const targetSelector = `label[for="${qInfo.qId}-${targetIndex}"]`;
-                clickSuccess = await this.smoothMoveAndClick(targetSelector);
+            if (answerDecision.targetOption?.forAttr) {
+                clickSuccess = await this.smoothMoveAndClick(`label[for="${answerDecision.targetOption.forAttr}"]`);
+            }
+            if (!clickSuccess && answerDecision.targetOption?.id) {
+                clickSuccess = await this.smoothMoveAndClick(`label[for="${answerDecision.targetOption.id}"]`);
             }
             if (!clickSuccess) {
                 try {
-                    const labels = await this.page.$$('label, .ant-radio-wrapper');
+                    const labels = await this.page.$$('label, .ant-radio-wrapper, .ant-checkbox-wrapper');
                     if (labels[targetIndex]) {
-                        await this.smoothMoveAndClick(labels[targetIndex]);
+                        clickSuccess = await this.smoothMoveAndClick(labels[targetIndex]);
                     } else if (labels[0]) {
-                        await this.smoothMoveAndClick(labels[0]);
+                        clickSuccess = await this.smoothMoveAndClick(labels[0]);
                     }
                 } catch (e) {}
             }
