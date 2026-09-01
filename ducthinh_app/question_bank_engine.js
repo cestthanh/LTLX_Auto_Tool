@@ -252,10 +252,32 @@ class QuestionBankEngine {
             }
         }
 
-        // --- CHIẾN LƯỢC 3: TRA CỨU NGÂN HÀNG 600 CÂU GPLX CHUẨN CỤC ĐƯỜNG BỘ ---
+        // --- CHIẾN LƯỢC 1: QUY TẮC VÀNG 600 CÂU GPLX (CÂU ĐIỂM LIỆT & ĐÁP ÁN TUYỆT ĐỐI) ---
+        for (let i = 0; i < options.length; i++) {
+            const normOpt = this.normalize(options[i].text || options[i].fullText || '');
+            for (const kw of this.priorityAnswerKeywords) {
+                if (normOpt.includes(kw)) {
+                    return {
+                        targetIndex: i,
+                        targetOption: options[i],
+                        matchedText: options[i].text,
+                        confidence: 1.0,
+                        strategy: 'gplx_golden_rule'
+                    };
+                }
+            }
+        }
+
+        // --- CHIẾN LƯỢC 2: TRA CỨU NGÂN HÀNG 600 CÂU GPLX CHUẨN (SEMANTIC PATTERNS) ---
         if (normTitle.length > 5) {
             for (const item of this.gplxBank) {
-                const isMatch = item.keywords.every(kw => normTitle.includes(this.normalize(kw)));
+                let isMatch = false;
+                if (typeof item.test === 'function') {
+                    isMatch = item.test(normTitle);
+                } else if (Array.isArray(item.keywords)) {
+                    isMatch = item.keywords.every(kw => normTitle.includes(this.normalize(kw)));
+                }
+
                 if (isMatch) {
                     const candidateAnswers = [item.answer, ...(item.altAnswers || [])];
                     for (const cand of candidateAnswers) {
@@ -268,7 +290,7 @@ class QuestionBankEngine {
                                     targetOption: options[i],
                                     matchedText: options[i].text,
                                     confidence: 1.0,
-                                    strategy: 'gplx_600_official_bank'
+                                    strategy: 'gplx_600_semantic_rule'
                                 };
                             }
                         }

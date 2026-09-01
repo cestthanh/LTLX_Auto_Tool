@@ -58,19 +58,23 @@ class DucthinhBrowser {
         this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
         await this.page.setUserAgent(this.config.browser.userAgent);
 
-        // 1. Vô hiệu hóa bẫy devtools + Khóa cứng trạng thái Always-Visible / Always-Focused
+        // 1. Vô hiệu hóa cờ tự động hóa (Stealth Evasion) + Always-Visible / Always-Focused
         await this.page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-            console.table = function() {};
-            console.clear = function() {};
-            const origFunction = window.Function;
-            window.Function = function(...args) {
-                if (args.length > 0 && typeof args[args.length - 1] === "string" && args[args.length - 1].includes("debugger")) {
-                    return function() {};
-                }
-                return origFunction.apply(this, args);
+            // Xóa cờ webdriver đúng chuẩn stealth không để lại getter footprint
+            const newProto = navigator.__proto__;
+            delete newProto.webdriver;
+            navigator.__proto__ = newProto;
+
+            // Giả lập chrome runtime & plugins chuẩn
+            window.chrome = {
+                app: { isInstalled: false },
+                webstore: { onInstallStageEvent: {}, onDownloadProgress: {} },
+                runtime: { PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' } }
             };
-            window.Function.prototype = origFunction.prototype;
+
+            // Giả lập languages & permissions chuẩn trình duyệt Việt Nam
+            Object.defineProperty(navigator, 'languages', { get: () => ['vi-VN', 'vi', 'en-US', 'en'] });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
 
             // 🛡️ ALWAYS-VISIBLE & ALWAYS-FOCUSED (Cho phép chuyển tab / tắt màn hình không bị cảnh báo)
             Object.defineProperty(document, "visibilityState", { get: () => "visible" });
@@ -719,14 +723,14 @@ class DucthinhBrowser {
                 statusMessage: `Đang làm câu ${completedCount}/${dynamicTotal}`
             });
 
-            // 1. MÔ PHỎNG ĐỌC ĐỀ NGẪU NHIÊN (1.5s - 2.5s)
-            const readTime = 1.5 + Math.random() * 1.0;
+            // 1. MÔ PHỎNG ĐỌC ĐỀ TỰ NHIÊN (3s - 5.5s)
+            const readTime = 3.0 + Math.random() * 2.5;
             await new Promise(res => setTimeout(res, Math.round(readTime * 1000)));
 
             // 2. CUỘN NHẸ TRANG NHƯ NGƯỜI THẬT
             try {
-                await this.page.mouse.wheel({ deltaY: 25 + Math.floor(Math.random() * 30) });
-                await new Promise(r => setTimeout(r, 250));
+                await this.page.mouse.wheel({ deltaY: 20 + Math.floor(Math.random() * 30) });
+                await new Promise(r => setTimeout(r, 300));
             } catch (e) {}
 
             await this.handleHumanVerificationIfNeeded();
