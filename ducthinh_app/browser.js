@@ -486,7 +486,7 @@ class DucthinhBrowser {
     async solveAllQuestions(options = {}) {
         const minDelay = options.minDelayPerQuestion || this.config.practice.minDelayPerQuestion || 3;
         const maxDelay = options.maxDelayPerQuestion || this.config.practice.maxDelayPerQuestion || 6;
-        const maxQuestions = options.maxQuestions || this.config.practice.maxQuestions || 185;
+        let requestedMax = options.maxQuestions || this.config.practice.maxQuestions || 185;
         const onProgress = options.onProgress || (() => {});
         const onLog = options.onLog || console.log;
         const isRunningCheck = options.isRunningCheck || (() => true);
@@ -499,8 +499,9 @@ class DucthinhBrowser {
         }
 
         let completedCount = 0;
+        let dynamicTotal = requestedMax;
 
-        for (let i = 1; i <= maxQuestions; i++) {
+        for (let i = 1; i <= dynamicTotal; i++) {
             if (!isRunningCheck()) break;
 
             await new Promise(r => setTimeout(r, 600));
@@ -511,18 +512,54 @@ class DucthinhBrowser {
             // Kiểm tra và tạm dừng nếu có Captcha / Xác minh người thật
             await this.handleHumanVerificationIfNeeded();
 
-            // Kiểm tra nếu bài luyện thi đã kết thúc
+            // 1. ĐỌC TIẾN ĐỘ THỰC TẾ TRÊN GIAO DIỆN (Ví dụ: "Câu hỏi : 115/115")
+            const headerProgress = await this.safeEvaluate(() => {
+                const allEls = Array.from(document.querySelectorAll('body *'));
+                for (const el of allEls) {
+                    if (el.children.length === 0 && el.innerText) {
+                        const txt = el.innerText.trim();
+                        const match = txt.match(/Câu hỏi\s*:\s*(\d+)\s*\/\s*(\d+)/i) || txt.match(/^(\d+)\s*\/\s*(\d+)$/);
+                        if (match) {
+                            const cur = parseInt(match[1], 10);
+                            const tot = parseInt(match[2], 10);
+                            if (tot > 0 && cur <= tot) {
+                                return { current: cur, total: tot };
+                            }
+                        }
+                    }
+                }
+                return null;
+            });
+
+            if (headerProgress) {
+                // Tự động điều chỉnh tổng số câu của phần này (ví dụ: 115 câu cho Phần 3)
+                if (dynamicTotal > headerProgress.total || dynamicTotal === 185) {
+                    dynamicTotal = headerProgress.total;
+                }
+            }
+
+            // Kiểm tra nếu bài luyện thi đã kết thúc hoặc xuất hiện bảng điểm
             const isFinished = await this.safeEvaluate(() => {
                 const text = document.body.innerText;
-                return text.includes("Kết quả luyện tập") || text.includes("Hoàn thành bài luyện") || text.includes("Điểm số của bạn");
+                const modalVisible = !!document.querySelector('.ant-modal-confirm, .ant-modal, [role="dialog"]');
+                return text.includes("Kết quả luyện tập") || text.includes("Hoàn thành bài luyện") || text.includes("Điểm số của bạn") ||
+                       (modalVisible && text.includes("kết thúc luyện tập"));
             });
 
             if (isFinished) {
-                onLog("🎉 ĐÃ HOÀN THÀNH TOÀN BỘ BÀI LUYỆN TẬP!", "success");
+                await this.autoConfirmDialogs();
+                onLog("🎉 ĐÃ ĐẾN CÂU HỎI CUỐI CÙNG & HOÀN THÀNH TOÀN BỘ ĐỀ THI!", "success");
+                onProgress({
+                    current: dynamicTotal,
+                    total: dynamicTotal,
+                    percent: 100,
+                    detail: `Hoàn tất toàn bộ ${dynamicTotal}/${dynamicTotal} câu!`,
+                    statusMessage: `Đã hoàn thành 100% (${dynamicTotal}/${dynamicTotal} câu)`
+                });
                 break;
             }
 
-            // Lấy thông tin câu hỏi
+            // Lấy thông tin câu hỏi hiện tại
             const qInfo = await this.safeEvaluate(() => {
                 const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
                 const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper'));
@@ -541,31 +578,32 @@ class DucthinhBrowser {
             });
 
             if (!qInfo || (!qInfo.qId && qInfo.optionsCount === 0)) {
+                await this.autoConfirmDialogs();
                 await this.handleModals();
                 continue;
             }
 
-            completedCount++;
+            completedCount = headerProgress ? headerProgress.current : (completedCount + 1);
 
-            // Tìm đáp án đúng từ ngân hàng câu hỏi
+            // Tìm đáp án đúng từ ngân hàng câu hỏi chuẩn
             let targetIndex = 0;
             let ansText = "Phương án 1";
             if (qInfo.qId && this.questionBank.has(qInfo.qId)) {
                 const bankItem = this.questionBank.get(qInfo.qId);
                 targetIndex = bankItem.correctIndices[0] || 0;
                 ansText = bankItem.mc_answers?.[targetIndex]?.text || `Phương án ${targetIndex + 1}`;
-                onLog(`[Câu ${completedCount}/${maxQuestions}] 🎯 Đáp án đúng: "${ansText}"`, "info");
+                onLog(`[Câu ${completedCount}/${dynamicTotal}] 🎯 Đáp án đúng: "${ansText}"`, "info");
             } else {
-                onLog(`[Câu ${completedCount}/${maxQuestions}] ℹ️ Chọn phương án 1`, "info");
+                onLog(`[Câu ${completedCount}/${dynamicTotal}] ℹ️ Chọn phương án 1`, "info");
             }
 
-            const pct = Math.round((completedCount / maxQuestions) * 100);
+            const pct = Math.round((completedCount / dynamicTotal) * 100);
             onProgress({
                 current: completedCount,
-                total: maxQuestions,
-                percent: pct,
-                detail: `Câu ${completedCount}/${maxQuestions} (${qInfo.title}...)`,
-                statusMessage: `Đang làm câu ${completedCount}/${maxQuestions}`
+                total: dynamicTotal,
+                percent: Math.min(pct, 100),
+                detail: `Câu ${completedCount}/${dynamicTotal} (${qInfo.title}...)`,
+                statusMessage: `Đang làm câu ${completedCount}/${dynamicTotal}`
             });
 
             // 1. MÔ PHỎNG ĐỌC ĐỀ NGẪU NHIÊN (1.5s - 2.5s)
@@ -609,6 +647,14 @@ class DucthinhBrowser {
 
             if (!isRunningCheck()) break;
 
+            // Nếu đây đã là câu hỏi cuối cùng của đề thi (ví dụ câu 115/115)
+            if (completedCount >= dynamicTotal) {
+                onLog(`[✓] Đã giải xong câu hỏi cuối cùng (${completedCount}/${dynamicTotal})!`, "success");
+                await new Promise(r => setTimeout(r, 1000));
+                await this.autoConfirmDialogs();
+                break;
+            }
+
             // 5. CHUYỂN TIẾP SANG CÂU SAU BẰNG DI CHUỘT
             try {
                 const nextBtn = await this.page.evaluateHandle(() => {
@@ -622,16 +668,22 @@ class DucthinhBrowser {
                 if (nextBtn && nextBtn.asElement()) {
                     await this.smoothMoveAndClick(nextBtn.asElement());
                 } else {
-                    await this.safeEvaluate(() => {
+                    const moved = await this.safeEvaluate(() => {
                         const buttons = Array.from(document.querySelectorAll('button, .ant-btn, a'));
                         for (const b of buttons) {
                             const txt = b.innerText.trim();
                             if (txt === "Tiếp" || txt === "Tiếp theo") {
                                 b.click();
-                                return;
+                                return true;
                             }
                         }
+                        return false;
                     });
+                    if (!moved) {
+                        // Không có nút tiếp theo, có thể đã hết câu hỏi
+                        console.log("[*] Không tìm thấy nút Tiếp theo, kết thúc bài làm...");
+                        break;
+                    }
                 }
             } catch (e) {}
         }
