@@ -621,8 +621,25 @@ class DucthinhBrowser {
             const qInfo = await this.safeEvaluate(() => {
                 const inputs = Array.from(document.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
                 const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper, .ant-checkbox-wrapper, .radio-option, [class*="option-item"]'));
-                const titleEl = document.querySelector('.question-content, .question-title, .title-question, h4, h3, .content');
-                const title = titleEl ? titleEl.innerText.trim() : "";
+                
+                // Lấy nội dung câu hỏi thực tế (bỏ qua tiêu đề header dạng "72. Câu hỏi chọn một đáp án")
+                let title = "";
+                const contentCandidates = Array.from(document.querySelectorAll('.question-content, .question-body, .content, p, div[class*="question"], div[class*="content"]'));
+                for (const el of contentCandidates) {
+                    const txt = el.innerText ? el.innerText.trim() : "";
+                    if (txt.length > 10 && !txt.includes("Câu hỏi chọn") && !txt.includes("Góp ý") && !txt.includes("Kết thúc luyện thi")) {
+                        // Ưu tiên đoạn text có chứa dấu ? hoặc từ khóa hỏi
+                        if (txt.includes("?") || txt.includes("dưới đây") || txt.includes("nào") || txt.includes("giao thông") || txt.includes("Vạch") || txt.includes("Biển") || txt.includes("Xe")) {
+                            title = txt;
+                            break;
+                        }
+                        if (!title) title = txt;
+                    }
+                }
+                if (!title) {
+                    const titleEl = document.querySelector('.question-content, .question-title, .title-question, h4, h3, .content');
+                    title = titleEl ? titleEl.innerText.trim() : "";
+                }
 
                 let qId = null;
                 if (inputs.length > 0 && inputs[0].id) {
@@ -647,7 +664,7 @@ class DucthinhBrowser {
 
                 return {
                     qId,
-                    title: title.slice(0, 100),
+                    title: title.slice(0, 150),
                     options,
                     optionsCount: options.length || labels.length || inputs.length
                 };

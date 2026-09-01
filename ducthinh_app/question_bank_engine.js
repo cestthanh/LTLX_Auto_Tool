@@ -1,17 +1,11 @@
-/**
- * QUESTION BANK ENGINE - CƠ CHẾ GIẢI CÂU HỎI TRẮC NGHIỆM CHÍNH XÁC 100%
- * Hỗ trợ:
- * 1. Bắt gói tin API đa kênh (Network Interception toàn diện).
- * 2. Đọc trực tiếp State trong bộ nhớ trình duyệt (React Fiber / Redux / window / SessionStorage).
- * 3. So khớp nội dung văn bản (Text Content Matching) chống đảo thứ tự đáp án.
- * 4. Ngân hàng dữ liệu & Quy tắc giải GPLX chuẩn 600 câu của Cục Đường bộ Việt Nam.
- */
+const { GPLX_QUESTION_BANK } = require('./gplx_600_data');
 
 class QuestionBankEngine {
     constructor() {
         // Map lưu trữ: key = qId hoặc normalized question text -> value = { content, correctAnswers, mc_answers }
         this.bankById = new Map();
         this.bankByText = new Map();
+        this.gplxBank = GPLX_QUESTION_BANK;
         this.initGPLXStandardRules();
     }
 
@@ -258,7 +252,32 @@ class QuestionBankEngine {
             }
         }
 
-        // --- CHIẾN LƯỢC 3: QUY TẮC VÀNG 600 CÂU GPLX (CÂU ĐIỂM LIỆT & ĐÁP ÁN TUYỆT ĐỐI) ---
+        // --- CHIẾN LƯỢC 3: TRA CỨU NGÂN HÀNG 600 CÂU GPLX CHUẨN CỤC ĐƯỜNG BỘ ---
+        if (normTitle.length > 5) {
+            for (const item of this.gplxBank) {
+                const isMatch = item.keywords.every(kw => normTitle.includes(this.normalize(kw)));
+                if (isMatch) {
+                    const candidateAnswers = [item.answer, ...(item.altAnswers || [])];
+                    for (const cand of candidateAnswers) {
+                        const normCand = this.normalize(cand);
+                        for (let i = 0; i < options.length; i++) {
+                            const normOpt = this.normalize(options[i].text || options[i].fullText || '');
+                            if (normOpt && normCand && (normOpt.includes(normCand) || normCand.includes(normOpt))) {
+                                return {
+                                    targetIndex: i,
+                                    targetOption: options[i],
+                                    matchedText: options[i].text,
+                                    confidence: 1.0,
+                                    strategy: 'gplx_600_official_bank'
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- CHIẾN LƯỢC 4: QUY TẮC VÀNG 600 CÂU GPLX (CÂU ĐIỂM LIỆT & ĐÁP ÁN TUYỆT ĐỐI) ---
         for (let i = 0; i < options.length; i++) {
             const normOpt = this.normalize(options[i].text || options[i].fullText || '');
             for (const kw of this.priorityAnswerKeywords) {
