@@ -204,12 +204,16 @@ class DucthinhBrowser {
             return currentUrl;
         }
 
-        const loginUrl = `${this.config.baseUrl}/user/login`;
-        console.log(`[*] Đang truy cập ${loginUrl}...`);
+        const baseUrl = this.config.baseUrl;
+        console.log(`[*] Đang truy cập trang chủ ${baseUrl}...`);
         
         try {
-            await this.page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
-        } catch (e) {}
+            await this.page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded", timeout: 25000 });
+        } catch (e) {
+            try {
+                await this.page.goto(`${baseUrl}/user/login`, { waitUntil: "domcontentloaded", timeout: 25000 });
+            } catch (e2) {}
+        }
 
         // Kiểm tra xem trang có tự động chuyển vào dashboard luôn không
         await new Promise(r => setTimeout(r, 1000));
