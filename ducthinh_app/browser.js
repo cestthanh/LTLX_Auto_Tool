@@ -723,14 +723,14 @@ class DucthinhBrowser {
                 statusMessage: `Đang làm câu ${completedCount}/${dynamicTotal}`
             });
 
-            // 1. MÔ PHỎNG ĐỌC ĐỀ TỰ NHIÊN (3s - 5.5s)
-            const readTime = 3.0 + Math.random() * 2.5;
+            // 1. MÔ PHỎNG ĐỌC ĐỀ NHANH GỌN (1.5s - 2.5s)
+            const readTime = 1.5 + Math.random() * 1.0;
             await new Promise(res => setTimeout(res, Math.round(readTime * 1000)));
 
-            // 2. CUỘN NHẸ TRANG NHƯ NGƯỜI THẬT
+            // 2. CUỘN NHẸ TRANG
             try {
-                await this.page.mouse.wheel({ deltaY: 20 + Math.floor(Math.random() * 30) });
-                await new Promise(r => setTimeout(r, 300));
+                await this.page.mouse.wheel({ deltaY: 20 + Math.floor(Math.random() * 25) });
+                await new Promise(r => setTimeout(r, 200));
             } catch (e) {}
 
             await this.handleHumanVerificationIfNeeded();

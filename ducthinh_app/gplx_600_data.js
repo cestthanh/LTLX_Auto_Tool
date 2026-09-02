@@ -272,6 +272,48 @@ const GPLX_QUESTION_BANK = [
         test: (q) => q.includes("xe nao vi pham quy tac"),
         answer: "Xe tải",
         altAnswers: ["Xe con", "Xe mô tô"]
+    },
+
+    // 6. CÁC QUY TẮC AN TOÀN & ĐIỀU KHIỂN XE
+    {
+        test: (q) => q.includes("su dung coi") && (q.includes("do thi") || q.includes("dong dan cu")),
+        answer: "Từ 5 giờ sáng đến 22 giờ đêm",
+        altAnswers: ["5 giờ sáng đến 22 giờ", "5h đến 22h"]
+    },
+    {
+        test: (q) => q.includes("khong duoc bam coi") || (q.includes("cam bam coi") && q.includes("gio")),
+        answer: "Từ 22 giờ đêm đến 5 giờ sáng",
+        altAnswers: ["22 giờ đêm đến 5 giờ sáng", "22h đến 5h"]
+    },
+    {
+        test: (q) => q.includes("dung xe") && q.includes("duong sat") && (q.includes("khoang cach") || q.includes("cach toi thieu")),
+        answer: "5 mét",
+        altAnswers: ["5m", "5 mét."]
+    },
+    {
+        test: (q) => q.includes("chuyen huong") && q.includes("nguoi lai xe phai"),
+        answer: "Giảm tốc độ và có tín hiệu báo hướng rẽ",
+        altAnswers: ["Giảm tốc độ", "tín hiệu báo hướng rẽ"]
+    },
+    {
+        test: (q) => q.includes("tranh xe di nguoc chieu"),
+        answer: "Xe xuống dốc phải nhường đường cho xe đang lên dốc",
+        altAnswers: ["xuống dốc phải nhường đường"]
+    },
+    {
+        test: (q) => q.includes("khi gap bien stop") || q.includes("bien dung lai"),
+        answer: "Tất cả các loại xe cơ giới và thô sơ đều phải dừng lại",
+        altAnswers: ["Tất cả các xe", "kể cả xe ưu tiên"]
+    },
+    {
+        test: (q) => q.includes("ngap nuoc") && q.includes("xe o to"),
+        answer: "Về số 1, giữ đều ga",
+        altAnswers: ["Về số thấp", "Về số 1"]
+    },
+    {
+        test: (q) => q.includes("troi mua to") || q.includes("suong mu"),
+        answer: "Bật đèn chiếu gần và đèn sương mù, giảm tốc độ",
+        altAnswers: ["Bật đèn chiếu gần", "giảm tốc độ"]
     }
 ];
 
