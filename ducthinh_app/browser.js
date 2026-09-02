@@ -208,7 +208,7 @@ class DucthinhBrowser {
         console.log(`[*] Đang truy cập ${loginUrl}...`);
         
         try {
-            await this.page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+            await this.page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
         } catch (e) {}
 
         // Kiểm tra xem trang có tự động chuyển vào dashboard luôn không
@@ -219,9 +219,24 @@ class DucthinhBrowser {
             return currentUrl;
         }
 
+        // Kiểm tra xem tài khoản có đang bị tạm khóa (Countdown Modal) không
+        const lockCheck = await this.safeEvaluate(() => {
+            const bodyText = document.body ? document.body.innerText : "";
+            if (bodyText.includes("Tài khoản tạm thời bị khóa") || bodyText.includes("hoạt động bất thường") || bodyText.includes("thời gian khóa")) {
+                const timeMatch = bodyText.match(/(\d{1,2}\s*:\s*\d{2})/);
+                const remaining = timeMatch ? timeMatch[1] : "";
+                return { isLocked: true, remaining };
+            }
+            return { isLocked: false };
+        });
+
+        if (lockCheck && lockCheck.isLocked) {
+            throw new Error(`🔒 Tài khoản đang bị tạm khóa ${lockCheck.remaining ? `(còn ${lockCheck.remaining})` : ''}. Vui lòng chờ hết thời gian đếm ngược!`);
+        }
+
         // 2. Chờ song song cả Form đăng nhập HOẶC Bảng Dashboard
         const targetElement = await Promise.race([
-            this.page.waitForSelector('input[name="lname"], input[name="username"], input[type="text"], input#username', { timeout: 20000 }).then(() => 'form'),
+            this.page.waitForSelector('input[name="lname"], input[name="username"], input[type="text"], input#username, input:not([type="password"]):not([type="hidden"])', { timeout: 20000 }).then(() => 'form'),
             this.page.waitForSelector('table, .ant-table, [class*="student"]', { timeout: 20000 }).then(() => 'dashboard')
         ]).catch(() => null);
 
@@ -230,10 +245,25 @@ class DucthinhBrowser {
             return this.page.url();
         }
 
+        // Kiểm tra lại khóa tài khoản sau khi chờ selector
+        const lockCheck2 = await this.safeEvaluate(() => {
+            const bodyText = document.body ? document.body.innerText : "";
+            if (bodyText.includes("Tài khoản tạm thời bị khóa") || bodyText.includes("hoạt động bất thường") || bodyText.includes("thời gian khóa")) {
+                const timeMatch = bodyText.match(/(\d{1,2}\s*:\s*\d{2})/);
+                const remaining = timeMatch ? timeMatch[1] : "";
+                return { isLocked: true, remaining };
+            }
+            return { isLocked: false };
+        });
+
+        if (lockCheck2 && lockCheck2.isLocked) {
+            throw new Error(`🔒 Tài khoản đang bị tạm khóa ${lockCheck2.remaining ? `(còn ${lockCheck2.remaining})` : ''}. Vui lòng chờ hết thời gian đếm ngược!`);
+        }
+
         console.log(`[*] Nhập tài khoản: ${username}`);
-        const userInput = await this.page.$('input[name="lname"], input[name="username"], input[type="text"], input#username');
+        const userInput = await this.page.$('input[name="lname"], input[name="username"], input[type="text"], input#username, input:not([type="password"]):not([type="hidden"])');
         if (!userInput) {
-            throw new Error("Không tìm thấy ô nhập tài khoản trên trang đăng nhập.");
+            throw new Error("Không tìm thấy ô nhập tài khoản trên trang đăng nhập (có thể kết nối mạng bị chậm hoặc trang chưa tải xong).");
         }
 
         // Xóa sạch dữ liệu cũ và gõ tài khoản
